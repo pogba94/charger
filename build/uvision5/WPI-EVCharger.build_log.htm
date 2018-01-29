@@ -1,0 +1,124 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: ¦ÌVision V5.16.0.0
+Copyright (C) 2015 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: ora ang, 123, LIC=DSNMM-XPZW5-IL1CB-2LCCL-EMB3N-M89AR
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Professional  Version: 5.16.0.0
+Toolchain Path:  F:\install\softwares\Keil_v5\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.06 (build 20)
+Assembler:       Armasm.exe V5.06 (build 20)
+Linker/Locator:  ArmLink.exe V5.06 (build 20)
+Library Manager: ArmAr.exe V5.06 (build 20)
+Hex Converter:   FromElf.exe V5.06 (build 20)
+CPU DLL:         SARMCM3.DLL V5.16.0.0
+Dialog DLL:      DCM.DLL V1.13.2.0
+Target DLL:      UL2CM3.DLL V1.155.12.0
+Dialog DLL:      TCM.DLL V1.14.5.0
+ 
+<h2>Project:</h2>
+I:\WPI-EVCharger_Code_V1.0\WPI-EVCharger\WPI-EVCharger.uvprojx
+Project File Date:  01/24/2018
+
+<h2>Output:</h2>
+*** Using Compiler 'V5.06 (build 20)', folder: 'F:\install\softwares\Keil_v5\ARM\ARMCC\Bin'
+Build target 'WPI-EVCharger'
+compiling otaCharger.cpp...
+OTA/otaCharger.h(17): warning:  #1-D: last line of file ends without a newline
+  #endif
+OTA/otaCharger.cpp(59): warning:  #1-D: last line of file ends without a newline
+  }
+OTA/otaCharger.cpp: 2 warnings, 0 errors
+compiling EVCharger.cpp...
+OTA\otaCharger.h(17): warning:  #1-D: last line of file ends without a newline
+  #endif
+EVCharger/EVCharger.cpp(108): warning:  #940-D: missing return statement at end of non-void function "pauseCharging"
+  }
+EVCharger/EVCharger.cpp(136): warning:  #940-D: missing return statement at end of non-void function "startCharging"
+  }
+EVCharger/EVCharger.cpp(572): warning:  #2748-D: null argument provided for parameter marked with attribute "nonnull"
+          if(strcmp(chargerInfo.meterNumber, 
+ULL) == NULL) {  //20160918 ericyang
+EVCharger/EVCharger.cpp: 4 warnings, 0 errors
+compiling main.cpp...
+OTA\otaCharger.h(17): warning:  #1-D: last line of file ends without a newline
+  #endif
+main.cpp(233): warning:  #2748-D: null argument provided for parameter marked with attribute "nonnull"
+      if(strcmp(eth.getIPAddress(),
+ULL) == NULL) {
+main.cpp(237): warning:  #181-D: argument is incompatible with corresponding format string conversion
+      sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
+main.cpp(237): warning:  #181-D: argument is incompatible with corresponding format string conversion
+      sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
+main.cpp(237): warning:  #181-D: argument is incompatible with corresponding format string conversion
+      sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
+main.cpp(237): warning:  #181-D: argument is incompatible with corresponding format string conversion
+      sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
+main.cpp(237): warning:  #181-D: argument is incompatible with corresponding format string conversion
+      sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
+main.cpp(237): warning:  #181-D: argument is incompatible with corresponding format string conversion
+      sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
+main.cpp(514): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+              if(chargerInfo.current > 0.2) { // leak current
+main.cpp(604): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+          cpADCRead = cpADC*3.3;
+main.cpp(624): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  		if(top3Num[maxPos] - top3Num[minPos] > 0.2)
+main.cpp(632): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  		if((averValue > 2.10)&&(averValue < 2.42)) { // (12-0.7) / 5  = 2.26  +/- (0.8/5) ericyang 20170216
+main.cpp(632): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  		if((averValue > 2.10)&&(averValue < 2.42)) { // (12-0.7) / 5  = 2.26  +/- (0.8/5) ericyang 20170216
+main.cpp(635): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  			} else if((averValue > 1.50)&&(averValue < 1.82)) { // (9-0.7) / 5  = 1.66 +/- (0.8/5) ericyang 20170216
+main.cpp(635): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  			} else if((averValue > 1.50)&&(averValue < 1.82)) { // (9-0.7) / 5  = 1.66 +/- (0.8/5) ericyang 20170216
+main.cpp(638): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  			}	else if((averValue > 0.90) && (averValue < 1.22)) { // (6-0.7) / 5  = 1.06 +/- (0.8/5) ericyang 20170216
+main.cpp(638): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  			}	else if((averValue > 0.90) && (averValue < 1.22)) { // (6-0.7) / 5  = 1.06 +/- (0.8/5) ericyang 20170216
+main.cpp(640): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  		}	else if(averValue < 0.1) {
+main.cpp(597): warning:  #177-D: variable "validCPNum" was declared but never referenced
+      int validCPNum=0;
+main.cpp(876): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+  			if(fabs(chargingEnergy - chargerInfo.energy)>=0.1){
+main.cpp(1030): warning:  #181-D: argument is incompatible with corresponding format string conversion
+              sscanf(socketInfo.inBuffer,"%d.%d.%d.%d:%d",serverInfo,serverInfo+1,serverInfo+2,serverInfo+3,&serverPort);
+main.cpp(1030): warning:  #181-D: argument is incompatible with corresponding format string conversion
+              sscanf(socketInfo.inBuffer,"%d.%d.%d.%d:%d",serverInfo,serverInfo+1,serverInfo+2,serverInfo+3,&serverPort);
+main.cpp(1030): warning:  #181-D: argument is incompatible with corresponding format string conversion
+              sscanf(socketInfo.inBuffer,"%d.%d.%d.%d:%d",serverInfo,serverInfo+1,serverInfo+2,serverInfo+3,&serverPort);
+main.cpp(1030): warning:  #181-D: argument is incompatible with corresponding format string conversion
+              sscanf(socketInfo.inBuffer,"%d.%d.%d.%d:%d",serverInfo,serverInfo+1,serverInfo+2,serverInfo+3,&serverPort);
+main.cpp(1226): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
+      Thread th1(timerOneSecondThread,
+ULL,osPriorityNormal,/*1024 512*/1024);
+main.cpp(1227): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
+      Thread th2(heartbeatThread,
+ULL,osPriorityNormal,/*1024 512*/512);
+main.cpp(1228): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
+  		Thread th3(exceptionHandleThread,
+ULL,osPriorityAboveNormal,1024);
+main.cpp(1339): warning:  #111-D: statement is unreachable
+      eth.disconnect();   //close Ethernet
+main.cpp(1340): warning:  #1-D: last line of file ends without a newline
+  }   //end main()
+main.cpp: 29 warnings, 0 errors
+linking...
+Program Size: Code=104270 RO-data=8610 RW-data=620 ZI-data=63672  
+After Build - User command #1: fromelf --bin -o .\build\uvision5\bin\WPI-EVCharger.bin .\build\uvision5\WPI-EVCharger.axf
+".\build\uvision5\WPI-EVCharger.axf" - 0 Error(s), 35 Warning(s).
+
+<h2>Collection of Component include folders:</h2>
+  I:\WPI-EVCharger_Code_V1.0\WPI-EVCharger\RTE
+  F:\install\softwares\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Device\Include
+
+<h2>Collection of Component Files used:</h2>
+Build Time Elapsed:  00:00:09
+</pre>
+</body>
+</html>
