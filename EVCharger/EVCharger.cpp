@@ -13,7 +13,7 @@ MSGID msgID = invalidID;
 MSGID notifySendID = invalidID;  // send notify to server flag
 int notifySendCounter = 0;
 char msgIdstr[10];
-int respcode ;
+volatile int respcode ;
 char jsonBuffer[256];
 ChargerInfo chargerInfo;
 //MeterInfo meterInfo;
@@ -225,7 +225,6 @@ void parseRecvMsgInfo(char *text)
     if (!json) {
         pc.printf("not json string, start to parse another way!\r\n");
         parseBincodeBuffer(text);
-        //pc.printf("Error before: [%s]\r\n",cJSON_GetErrorPtr());
     } else {
         pc.printf("start parse json!\r\n");
         cJSON *data = cJSON_GetObjectItem(json,"data");
@@ -264,7 +263,7 @@ void parseRecvMsgInfo(char *text)
 													#else
 														startCharging();
 													#endif
-//													respcode = RESP_OK;
+													respcode = RESP_OK;
 													startS2SwitchWaitCounterFlag = true;
 													waitS2SwitchOnCounter = 0;
 												  respMsgBuff.msgId = setChargingStart;
@@ -272,7 +271,7 @@ void parseRecvMsgInfo(char *text)
 													sprintf(respMsgBuff.msgIdStr,cJSON_GetObjectItem(data,"msgId")->valuestring);
 												}else{
 												 respcode = RESP_PARAM_ERROR;
-												 pc.printf("charging type error!\r\n");
+												 pc.printf("charging parameters error!\r\n");
 												 cmdMsgRespHandle(msgID);   //Parameter error, respond immediately
 												}
 											}else{
@@ -290,7 +289,7 @@ void parseRecvMsgInfo(char *text)
                 sprintf(msgIdstr,cJSON_GetObjectItem(data,"msgId")->valuestring);
                 pc.printf("recv msg %s , msgid = %s\r\n",SETChargingEnd,msgIdstr);
 							if((chargerInfo.status & CHARGER_STATUS_MASK)==charging){
-//                respcode = RESP_OK;
+                respcode = RESP_OK;
 							#ifdef GB18487_1_2015_AUTH_FUNC
 								preStopCharging(); // ericyang 20170111
 							#else
@@ -660,7 +659,7 @@ void cmdMsgRespHandle(MSGID msgid)
     if((msgid == invalidID)||(msgid >= unknownMsgID))
         return;
     memset(socketInfo.outBuffer,0,sizeof(socketInfo.outBuffer));
-
+    pc.printf("respMsgBuff.sendRespFlag=%d\r\n",respMsgBuff.sendRespFlag);
   //  if(msgid == setChargingTime) {
   //      sprintf(socketInfo.outBuffer,CMD_RESP_setChargingTime,respcode,msgIdstr);
   //  } else 
@@ -668,8 +667,9 @@ void cmdMsgRespHandle(MSGID msgid)
 			   if(respMsgBuff.sendRespFlag == true){
 						sprintf(socketInfo.outBuffer,CMD_RESP_setChargingStart,respMsgBuff.respCode,respMsgBuff.msgIdStr);
 					  respMsgBuff.sendRespFlag = false; //clear flag
-				 }else 
+				 }else {
 					  sprintf(socketInfo.outBuffer,CMD_RESP_setChargingStart,respcode,msgIdstr);
+				 }
     } else if(msgid == setChargingEnd) {  //Modify 20171222
 				if(respMsgBuff.sendRespFlag == true){
 						sprintf(socketInfo.outBuffer,CMD_RESP_setChargingEnd,respMsgBuff.respCode,respMsgBuff.msgIdStr,curChargingType,curChargingEnergy,  // ericyang 20161216

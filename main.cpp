@@ -748,7 +748,7 @@ void checkChargingStatus(void)
 							if(chargerInfo.status == connected) {
 									startCharging();   //Begin charging!
 								  respMsgBuff.respCode = RESP_OK;
-								  cmdMsgRespHandle(respMsgBuff.msgId);  //send respcond msg to server
+								  cmdMsgRespHandle(setChargingStart);  //send respcond msg to server
 							}
 							else{
 									if(pauseChargingFlag == true){  // recover charging ;do not notify server
@@ -769,7 +769,7 @@ void checkChargingStatus(void)
 //								#endif
 								gChargingState = EV_IDLE;
 								respMsgBuff.respCode = RESP_ILLEGAL; 
-								cmdMsgRespHandle(respMsgBuff.msgId);  //send respcond msg to server
+								cmdMsgRespHandle(setChargingEnd);  //send respcond msg to server
 						}else{ //orangecai 20170608
 								if(pauseChargingFlag == true && pauseChargingCounter > MAX_PAUSE_TIME){ //overtime of pause charging
 										pauseChargingFlag = false;
@@ -797,7 +797,7 @@ void checkChargingStatus(void)
 										#endif
 									  gChargingState = EV_IDLE;
 									  respMsgBuff.respCode = RESP_TIMEOUT;
-									  cmdMsgRespHandle(respMsgBuff.msgId);  //send respcond msg to server
+									  cmdMsgRespHandle(setChargingStart);  //send respcond msg to server
 								}
 						}
 					}
@@ -844,7 +844,7 @@ void checkChargingStatus(void)
 					//gChargingState = EV_IDLE;
 					startS2SwitchOnOffCounterFlag = false;
           respMsgBuff.respCode = RESP_OK;
- 					cmdMsgRespHandle(respMsgBuff.msgId);  //send respcond msg to server
+ 					cmdMsgRespHandle(setChargingEnd);  //send respcond msg to server
 					break;
 			default:
 					break;	
@@ -1045,7 +1045,6 @@ void enterFactoryMode(void)   // LOCAL IP: 192.168.1.101:13348
                 erase_sector(SERVER_IP_ADDRESS);
                 program_flash(SERVER_IP_ADDRESS,serverInfo, 8);// length must be a multiple of 8 when K64F
                 sprintf(socketInfo.outBuffer,"Set Server Address: %d.%d.%d.%d port:%d OK! \r\nCharger MAC Address: %s\r\n",serverInfo[0],serverInfo[1],serverInfo[2],serverInfo[3],(serverInfo[4] << 8) | serverInfo[5],eth.getMACAddress());
-
             }
             udpsocket.sendTo(buddy,socketInfo.outBuffer,strlen(socketInfo.outBuffer));
         }
@@ -1057,26 +1056,10 @@ void exceptionHandleThread(void const *argument)
 {
 //	uint32_t temp = us_ticker_read();
 	while(true){
-//		pc.printf("period:%d\r\n",(us_ticker_read()-temp)/1000);
-//		temp = us_ticker_read();
-		
-//		checkChargerConnectStatus();
-//		#ifdef GB18487_1_2015_AUTH_FUNC
-//				checkChargingStatus();
-//		#endif
-
-//    chargingExceptionHandle();
-//		if(eventHandle.checkMeterFlag == true) {
-//        eventHandle.checkMeterFlag = false;
-//        getMeterInfo();
-//    }
-//			pc.printf("period:%d ms\r\n",(us_ticker_read()-temp)/1000);
-//			temp = us_ticker_read();		
 			checkChargerConnectStatus();
 			#ifdef GB18487_1_2015_AUTH_FUNC
 				checkChargingStatus();
 			#endif
-
 			chargingExceptionHandle();		
 		
 		if(eventHandle.checkMeterFlag == false){
@@ -1085,6 +1068,64 @@ void exceptionHandleThread(void const *argument)
 			eventHandle.checkMeterFlag = false;
       getMeterInfo();
 		}
+	}
+}
+/******************************network thread***************************/
+void netWorkThread(void const *argument)
+{
+	while(true){
+		        if(chargerException.serverConnectedFlag == false) {
+#ifndef NOT_CHECK_NETWORK
+            if(resetTimer > RESET_TIMER) { // 2 minutes
+                pc.printf("network error! system will be reset now, please wait...\r\n");
+                NVIC_SystemReset();
+            }
+#endif
+        } else {
+            resetTimer = 0;
+
+            if(notifySendID != invalidID) {
+                if((systemTimer-notifySendCounter) >= SOCKET_RESEND_TIME)
+								{
+                   notifyMsgSendHandle(notifySendID);  // >5s not receive resp msg, resend notify
+								   #ifdef NETWORK_COUNT_ENABLE
+								  	pc.printf("numbers of resended massages:%d\r\n",++networkCount.reSendCnt);
+								   #endif
+								}
+            } else {
+							  if(eventHandle.firstConnectFlag == true){
+									  pc.printf("first connetion!\r\n");
+										eventHandle.firstConnectFlag = false;
+									  notifyMsgSendHandle(notifyNewDevice);
+								}else if(eventHandle.stopChargingFlag == true){
+                    eventHandle.stopChargingFlag = false;
+                    notifyMsgSendHandle(notifyEndCharging);
+                }else if(eventHandle.updateChargerStatusFlag == true) {
+                    eventHandle.updateChargerStatusFlag = false;
+                    notifyMsgSendHandle(notifyChargerStatus);
+                }else if(eventHandle.updateChargerInfoFlag == true) {
+                    eventHandle.updateChargerInfoFlag = false;
+										if(chargerInfo.status == charging) {  // ericyang 20170111
+                        notifyMsgSendHandle(notifyChargingInfo);
+                    }
+                }else if(eventHandle.getLatestFWFromServerFlag == true) {
+                    notifyMsgSendHandle(notifyUpdateVersion);
+                }else if(eventHandle.updateVersionDoneFlag == true || eventHandle.updataVersionFailFlag == true){  //modify by orangeCai , 20170720
+									  eventHandle.updateVersionDoneFlag = false;
+									  eventHandle.updataVersionFailFlag = false;
+									  notifyMsgSendHandle(notifyOTAResult);
+								}
+            }
+            recvMsgHandle();
+						/* detect whether to update code,orangeCai 20170602 */
+						if(updateCodeFlag == true && (chargerInfo.status & CHARGER_STATUS_MASK) != charging ){ //update code while not charging
+							updateCodeFlag = false;
+							pc.printf("\r\n\r\n chargerInfo.status = %d,start to update code!\r\n\r\n",chargerInfo.status);
+							tcpsocket.close(); //close socket,20170713
+							updateCode(); // begin to update code
+						}
+        }
+			Thread::wait(50);
 	}
 }
 /********************************************MAIN****************************************/
@@ -1110,57 +1151,56 @@ int main(void)
     if(factoryMode == 0) {// PTD7 LOW
         enterFactoryMode();
     }
-//#define EEPROM_TEST
-#ifdef EEPROM_ENABLE
 
-#ifdef EEPROM_TEST
-#if 0
-		char dataTest[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-		uint8_t addr = 0x92;
-		pc.printf("addr:%x\r\n",addr);
-		pc.printf("size of dataTest:%d\r\n",sizeof(dataTest));
-		writeToEEPROM(addr,dataTest,sizeof(dataTest));
-		readFromEEPROM(addr,tempBuffer,sizeof(dataTest));
-		pc.printf("data:%s\r\n",tempBuffer);
-#else
-    uint8_t addr = 0x52;
-		pc.printf("addr:%x\r\n",addr);		
-		char meterNumber[9] = "12131415";
-		ChargerInfo tmpChargerInfo;
-		chargerInfo.connect = 1;
-		chargerInfo.current = 14.5;
-		chargerInfo.voltage = 233.3;
-		chargerInfo.duration = 34;
-		chargerInfo.energy = 13.5;
-		chargerInfo.setDuration = 120;
-		chargerInfo.power = 3133;
-		chargerInfo.status = idle;
-		memcpy(chargerInfo.meterNumber,meterNumber,sizeof(chargerInfo.meterNumber));
-#if 1		
-		writeToEEPROM(addr,(char*)(&chargerInfo),sizeof(chargerInfo));
-		readFromEEPROM(addr,(char*)(&tmpChargerInfo),sizeof(tmpChargerInfo));	
-		pc.printf("connet=%d\r\nstatus=%d\r\ncurrent=%f\r\nvoltage=%f\r\nenergy=%f\r\npower=%f\r\nmeterNumber=%s\r\n"
-		,tmpChargerInfo.connect,tmpChargerInfo.status,tmpChargerInfo.current,tmpChargerInfo.voltage,
-		tmpChargerInfo.energy,tmpChargerInfo.power,tmpChargerInfo.meterNumber);
-#else
-		uint16_t checksum,crc16;
-		char* temp = (char*)malloc(sizeof(chargerInfo)+2);
-		char* cdata;
-		crc16 = calculate_crc16((char*)&chargerInfo,sizeof(chargerInfo));
-		pc.printf("crc16=%x\r\n",crc16);
-		temp[0] = crc16 >> 8;
-		temp[1] = crc16 & 0xFF;
-		memcpy(temp+2,(char*)&chargerInfo,sizeof(chargerInfo));
-		writeToEEPROM(addr,temp,sizeof(chargerInfo)+2);
-		readFromEEPROM(addr,cdata,sizeof(chargerInfo)+2);
-		checksum = (cdata[0]<<8)|cdata[1];
-		pc.printf("checksum=%x\r\n",checksum);
-#endif
+//#ifdef EEPROM_ENABLE
+//#ifdef EEPROM_TEST
+//#if 0
+//		char dataTest[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+//		uint8_t addr = 0x92;
+//		pc.printf("addr:%x\r\n",addr);
+//		pc.printf("size of dataTest:%d\r\n",sizeof(dataTest));
+//		writeToEEPROM(addr,dataTest,sizeof(dataTest));
+//		readFromEEPROM(addr,tempBuffer,sizeof(dataTest));
+//		pc.printf("data:%s\r\n",tempBuffer);
+//#else
+//    uint8_t addr = 0x52;
+//		pc.printf("addr:%x\r\n",addr);		
+//		char meterNumber[9] = "12131415";
+//		ChargerInfo tmpChargerInfo;
+//		chargerInfo.connect = 1;
+//		chargerInfo.current = 14.5;
+//		chargerInfo.voltage = 233.3;
+//		chargerInfo.duration = 34;
+//		chargerInfo.energy = 13.5;
+//		chargerInfo.setDuration = 120;
+//		chargerInfo.power = 3133;
+//		chargerInfo.status = idle;
+//		memcpy(chargerInfo.meterNumber,meterNumber,sizeof(chargerInfo.meterNumber));
+//#if 1		
+//		writeToEEPROM(addr,(char*)(&chargerInfo),sizeof(chargerInfo));
+//		readFromEEPROM(addr,(char*)(&tmpChargerInfo),sizeof(tmpChargerInfo));	
+//		pc.printf("connet=%d\r\nstatus=%d\r\ncurrent=%f\r\nvoltage=%f\r\nenergy=%f\r\npower=%f\r\nmeterNumber=%s\r\n"
+//		,tmpChargerInfo.connect,tmpChargerInfo.status,tmpChargerInfo.current,tmpChargerInfo.voltage,
+//		tmpChargerInfo.energy,tmpChargerInfo.power,tmpChargerInfo.meterNumber);
+//#else
+//		uint16_t checksum,crc16;
+//		char* temp = (char*)malloc(sizeof(chargerInfo)+2);
+//		char* cdata;
+//		crc16 = calculate_crc16((char*)&chargerInfo,sizeof(chargerInfo));
+//		pc.printf("crc16=%x\r\n",crc16);
+//		temp[0] = crc16 >> 8;
+//		temp[1] = crc16 & 0xFF;
+//		memcpy(temp+2,(char*)&chargerInfo,sizeof(chargerInfo));
+//		writeToEEPROM(addr,temp,sizeof(chargerInfo)+2);
+//		readFromEEPROM(addr,cdata,sizeof(chargerInfo)+2);
+//		checksum = (cdata[0]<<8)|cdata[1];
+//		pc.printf("checksum=%x\r\n",checksum);
+//#endif
 
-#endif
-		while(1){}
-#endif
-#endif
+//#endif
+//		while(1){}
+//#endif
+//#endif
 
 #ifdef WDOG_ENABLE
 		wDogInit(WDOG_TIMEOUT_VALUE_MS);
@@ -1180,21 +1220,21 @@ int main(void)
     OTAInit();  // 20160912 for OTA FUNC
 #endif
 		us_ticker_init();
-#ifdef RTC_ENABLE
-rtcInit(RTC_INIT_TIME);
-#ifdef RTC_TEST
-		struct tm initTime;
-		initTime.tm_year = 117;
-		initTime.tm_mon = 5;
-		initTime.tm_mday = 20;
-		initTime.tm_hour = 0;
-		initTime.tm_min = 0;
-		initTime.tm_sec = 0; 
-		set_time(mktime(&initTime));
-		us_ticker_init();  
-		pc.printf("rtc enable!\r\n");
-#endif
-#endif
+//#ifdef RTC_ENABLE
+//rtcInit(RTC_INIT_TIME);
+//#ifdef RTC_TEST
+//		struct tm initTime;
+//		initTime.tm_year = 117;
+//		initTime.tm_mon = 5;
+//		initTime.tm_mday = 20;
+//		initTime.tm_hour = 0;
+//		initTime.tm_min = 0;
+//		initTime.tm_sec = 0; 
+//		set_time(mktime(&initTime));
+//		us_ticker_init();  
+//		pc.printf("rtc enable!\r\n");
+//#endif
+//#endif
 
 #ifndef GB18487_1_2015_AUTH_FUNC
 		if(chargerInfo.connect == CONNECTED_6V)
@@ -1217,15 +1257,13 @@ rtcInit(RTC_INIT_TIME);
 			pc.printf("sw2 =  0, disable PWM!\r\n");
 		}
 #endif		
-//    tcpsocket.set_blocking(false, 1500);//??????
-		tcpsocket.set_blocking(false,40);// depends on network delay 
 
-//   pc.printf("current_sp:  %08x\r\n",__current_sp());
-//    pc.printf("current_pc:  %08x\r\n",__current_pc());
+		tcpsocket.set_blocking(false,40);// depends on network delay 
 		
-    Thread th1(timerOneSecondThread,NULL,osPriorityNormal,/*1024 512*/1024);
-    Thread th2(heartbeatThread,NULL,osPriorityNormal,/*1024 512*/512);
+    Thread th1(timerOneSecondThread,NULL,osPriorityNormal,1024);
+    Thread th2(heartbeatThread,NULL,osPriorityNormal,512);
 		Thread th3(exceptionHandleThread,NULL,osPriorityAboveNormal,1024);
+		Thread th4(netWorkThread,NULL,osPriorityNormal,1024);
 
     while (1) {
 #ifdef  WDOG_ENABLE
@@ -1264,58 +1302,5 @@ rtcInit(RTC_INIT_TIME);
 					pc.printf("full of energy,stop charging!\r\n");
 				}
 #endif				
-
-        if(chargerException.serverConnectedFlag == false) {
-#ifndef NOT_CHECK_NETWORK
-            if(resetTimer > RESET_TIMER) { // 2 minutes
-                pc.printf("network error! system will be reset now, please wait...\r\n");
-                NVIC_SystemReset();
-            }
-#endif
-        } else {
-            resetTimer = 0;
-
-            if(notifySendID != invalidID) {
-                if((systemTimer-notifySendCounter) >= SOCKET_RESEND_TIME)
-								{
-                   notifyMsgSendHandle(notifySendID);  // >5s not receive resp msg, resend notify
-								   #ifdef NETWORK_COUNT_ENABLE
-								  	pc.printf("numbers of resended massages:%d\r\n",++networkCount.reSendCnt);
-								   #endif
-								}
-            } else {
-							  if(eventHandle.firstConnectFlag == true){
-									  pc.printf("first connetion!\r\n");
-										eventHandle.firstConnectFlag = false;
-									  notifyMsgSendHandle(notifyNewDevice);
-								}if(eventHandle.stopChargingFlag == true) {
-                    eventHandle.stopChargingFlag = false;
-                    notifyMsgSendHandle(notifyEndCharging);
-                }else if(eventHandle.updateChargerStatusFlag == true) {
-                    eventHandle.updateChargerStatusFlag = false;
-                    notifyMsgSendHandle(notifyChargerStatus);
-                }else if(eventHandle.updateChargerInfoFlag == true) {
-                    eventHandle.updateChargerInfoFlag = false;
-										if(chargerInfo.status == charging) {  // ericyang 20170111
-                        notifyMsgSendHandle(notifyChargingInfo);
-                    }
-                }else if(eventHandle.getLatestFWFromServerFlag == true) {
-                    notifyMsgSendHandle(notifyUpdateVersion);
-                }else if(eventHandle.updateVersionDoneFlag == true || eventHandle.updataVersionFailFlag == true){  //modify by orangeCai , 20170720
-									  eventHandle.updateVersionDoneFlag = false;
-									  eventHandle.updataVersionFailFlag = false;
-									  notifyMsgSendHandle(notifyOTAResult);
-								}
-            }
-            recvMsgHandle();
-						/* detect whether to update code,orangeCai 20170602 */
-						if(updateCodeFlag == true && (chargerInfo.status & CHARGER_STATUS_MASK) != charging ){ //update code while not charging
-							updateCodeFlag = false;
-							pc.printf("\r\n\r\n chargerInfo.status = %d,start to update code!\r\n\r\n",chargerInfo.status);
-							tcpsocket.close(); //close socket,20170713
-							updateCode(); // begin to update code
-						}
-        }
     }
-    eth.disconnect();   //close Ethernet
-}   //end main()
+}

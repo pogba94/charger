@@ -138,9 +138,9 @@ typedef struct _networkCount{
 #endif
 
 typedef struct _msg{
-	bool sendRespFlag;
-	MSGID msgId;
-	int respCode;
+	volatile bool sendRespFlag;
+	volatile MSGID msgId;
+	volatile int respCode;
 	char msgIdStr[10];
 }MSG;
 
@@ -222,7 +222,7 @@ extern volatile bool updateCodeFlag;
 extern volatile bool otaSuccessFlag;  //orangecai 20170720
 extern volatile bool startS2SwitchWaitCounterFlag;  //orangecai 20170807
 extern volatile int waitS2SwitchOnCounter; //orangecai 20170807
-extern MSG respMsgBuff;  // orangecai 20171221
+extern  MSG respMsgBuff;  // orangecai 20171221
 #ifdef RTC_ENABLE
 extern char timeStampMs[32];
 #endif

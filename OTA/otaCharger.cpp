@@ -44,12 +44,9 @@ void OTAInit(void)
             updateCode();  //never run here
         } else {
             pc.printf("the FW is already the newest!\r\n");
-            //eventHandle.checkLatestVersionFromServerFlag = true;
-            //pc.printf("start check latest FW version from Server !\r\n");
         }
     }
-//    eventHandle.checkLatestVersionFromServerFlag = true;
-//    pc.printf("start check latest FW version from Server !\r\n");
+
 }
 
 void updateCode(void)
