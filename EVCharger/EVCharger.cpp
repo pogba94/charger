@@ -697,8 +697,10 @@ void cmdMsgRespHandle(MSGID msgid)
     }else if(msgid == getCurVersion){
 				sprintf(socketInfo.outBuffer,CMD_RESP_getCurVersion,respcode,msgIdstr,VERSION_INFO);
 		}
+		myMutex.lock();
     len = strlen(socketInfo.outBuffer);
     tcpsocket.send(socketInfo.outBuffer, len);
+		myMutex.unlock();
 		pc.printf("cmdMsgRespHandle,send %d bytes: %s\r\n",len,socketInfo.outBuffer);
 		#ifdef NETWORK_COUNT_ENABLE
 		pc.printf("numbers of sended massage:%d\r\n",++networkCount.sendCnt);

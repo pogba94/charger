@@ -481,6 +481,7 @@ int getMeterInfo(void)
 //				chargerInfo.energy += 0.02;//for test!
         chargerInfo.voltage = (regvalue[7]<<8 | regvalue[8])*0.01;
         chargerInfo.current = (regvalue[11]<<24 | regvalue[12]<<16 | regvalue[9]<<8 | regvalue[10])*0.001;
+
         chargerInfo.power = ((regvalue[15]&0x7F)<<24 | regvalue[16]<<16 | regvalue[13]<<8 | regvalue[14])*0.1;
         //eventHandle.updateChargerInfoFlag = true; // ericyang 20161215 move to 1 second thread
         if((chargerInfo.voltage > 264) || (chargerInfo.voltage < 176)) {  // voltage: 176~264
@@ -629,20 +630,21 @@ CPSignal checkCPSignal(void)
 		}		
 		averValue = sumValue / ADC_SAMPLE_USE_TOP_NUM;
 		//if((averValue > 2.06)&&(averValue < 2.46)) { // (12-0.7) / 5  = 2.26
-		if((averValue > 2.10)&&(averValue < 2.42)) { // (12-0.7) / 5  = 2.26  +/- (0.8/5) ericyang 20170216
+		if((averValue > 2.14)&&(averValue < 2.46)) { // (12-0.7) / 5  = 2.26  +/- (0.8/5) ericyang 20170216
 				ret = PWM12V;
 		//} else if((averValue > 1.46)&&(averValue < 1.86)) { // (9-0.7) / 5  = 1.66
-			} else if((averValue > 1.50)&&(averValue < 1.82)) { // (9-0.7) / 5  = 1.66 +/- (0.8/5) ericyang 20170216
+			} else if((averValue > 1.54)&&(averValue < 1.86)) { // (9-0.7) / 5  = 1.66 +/- (0.8/5) ericyang 20170216
 				ret = PWM9V;
 		//} else if((averValue > 0.86) && (averValue < 1.26)) { // (6-0.7) / 5  = 1.06
-			}	else if((averValue > 0.90) && (averValue < 1.22)) { // (6-0.7) / 5  = 1.06 +/- (0.8/5) ericyang 20170216
+			}	else if((averValue > 0.94) && (averValue < 1.26)) { // (6-0.7) / 5  = 1.06 +/- (0.8/5) ericyang 20170216
 				ret = PWM6V;
-		}	else if(averValue < 0.1) {
+		}	else if(averValue < 0.1){
 				ret = PWM0V;
 		} else {
 				ret = PWMOtherVoltage;
 		}
-		//pc.printf("checkCPSignal: result: %d  %f v\r\n",ret,averValue);
+//		float value = averValue*5+0.5f;
+//		pc.printf("voltage:%f v\r\n",value);
     return ret;
 }
 /***********************************check charger connect to car***************************/
@@ -1235,7 +1237,6 @@ int main(void)
 //		pc.printf("rtc enable!\r\n");
 //#endif
 //#endif
-
 #ifndef GB18487_1_2015_AUTH_FUNC
 		if(chargerInfo.connect == CONNECTED_6V)
 		{
@@ -1264,7 +1265,7 @@ int main(void)
     Thread th2(heartbeatThread,NULL,osPriorityNormal,512);
 		Thread th3(exceptionHandleThread,NULL,osPriorityAboveNormal,1024);
 		Thread th4(netWorkThread,NULL,osPriorityNormal,1024);
-
+    
     while (1) {
 #ifdef  WDOG_ENABLE
 			  wDogFeed();   //feed dog
@@ -1273,18 +1274,6 @@ int main(void)
 #ifndef NOT_CHECK_NETWORK
         checkNetworkAvailable();
 #endif
-//       checkChargerConnectStatus(); // pwm 6v 12v detect
-
-//#ifdef GB18487_1_2015_AUTH_FUNC
-////				checkChargingStatus();  // ericyang 20170111
-//#endif
-//        checkChargingTime();
-//			  checkChargingFinish();
-//        if(eventHandle.checkMeterFlag == true) {
-//          eventHandle.checkMeterFlag = false;
-//          getMeterInfo();
-//        }
-//        chargingExceptionHandle();
 
 #ifdef ENABLE_FULL_CHARGING_DETECT
 				if(chargerInfo.status == charging && fullChargingFlag == true){
