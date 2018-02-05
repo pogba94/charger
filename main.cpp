@@ -109,7 +109,6 @@ int resetTimer = 0;
 float startEnergyReadFromMeter = 0;
 float totalEnergyReadFromMeter = 0;
 bool pwmState = false;
-MSG respMsgBuff = {false,invalidID,0,{0}};  // orangecai 20171221
 
 volatile bool pauseChargingFlag = false;
 volatile bool startS2SwitchWaitCounterFlag = false;   //orangecai 20170807
@@ -749,8 +748,6 @@ void checkChargingStatus(void)
 						#endif	
 							if(chargerInfo.status == connected) {
 									startCharging();   //Begin charging!
-								  respMsgBuff.respCode = RESP_OK;
-								  cmdMsgRespHandle(setChargingStart);  //send respcond msg to server
 							}
 							else{
 									if(pauseChargingFlag == true){  // recover charging ;do not notify server
@@ -770,8 +767,6 @@ void checkChargingStatus(void)
 //								eventHandle.stopChargingFlag = true;  // notify END charging msg to server;		20170113 important notify stop charging msg to server	
 //								#endif
 								gChargingState = EV_IDLE;
-								respMsgBuff.respCode = RESP_ILLEGAL; 
-								cmdMsgRespHandle(setChargingEnd);  //send respcond msg to server
 						}else{ //orangecai 20170608
 								if(pauseChargingFlag == true && pauseChargingCounter > MAX_PAUSE_TIME){ //overtime of pause charging
 										pauseChargingFlag = false;
@@ -798,8 +793,6 @@ void checkChargingStatus(void)
 										chargerInfo.status = connected;
 										#endif
 									  gChargingState = EV_IDLE;
-									  respMsgBuff.respCode = RESP_TIMEOUT;
-									  cmdMsgRespHandle(setChargingStart);  //send respcond msg to server
 								}
 						}
 					}
@@ -845,8 +838,6 @@ void checkChargingStatus(void)
 			//		eventHandle.stopChargingFlag = true;  // notify END charging msg to server; 
 					//gChargingState = EV_IDLE;
 					startS2SwitchOnOffCounterFlag = false;
-          respMsgBuff.respCode = RESP_OK;
- 					cmdMsgRespHandle(setChargingEnd);  //send respcond msg to server
 					break;
 			default:
 					break;	

@@ -258,7 +258,7 @@ extern volatile NetworkCount networkCount;
 
 #define CMD_RESP_setChargingStart   "{\"respType\":\"setChargingStart\",\"data\":{\"respCode\":%d,\"msgId\":\"%s\"}}"
 #define CMD_RESP_setChargingEnd     "{\"respType\":\"setChargingEnd\",\"data\":{\"respCode\":%d,\"msgId\":\"%s\",\"type\":%d,\"energy\":%0.1f,\"duration\":%d,\"status\":%d,\"connect\":%d,\"setDuration\":%d,\"setEnergy\":%0.1f}}" //20170719
-#define CMD_RESP_ILLEGAL_setChargingEnd  "{\"respType\":\"setChargingEnd\",\"data\":{\"respCode\":%d,\"msgId\":\"%s\"}}"  //20171222
+//#define CMD_RESP_ILLEGAL_setChargingEnd  "{\"respType\":\"setChargingEnd\",\"data\":{\"respCode\":%d,\"msgId\":\"%s\"}}"  //20171222
 #define CMD_RESP_setUpdateVersion   "{\"respType\":\"setUpdateVersion\",\"data\":{\"respCode\":%d,\"msgId\":\"%s\"}}"  //orangeCai 20170328
 #ifdef RTC_ENABLE
 	#define CMD_RESP_setCalibrateTime   "{\"respType\":\"setCalibrateTime\",\"data\":{\"respCode\":%d,\"msgId\":\"%s\"}}"//orangecai 20170720

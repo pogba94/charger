@@ -266,9 +266,7 @@ void parseRecvMsgInfo(char *text)
 													respcode = RESP_OK;
 													startS2SwitchWaitCounterFlag = true;
 													waitS2SwitchOnCounter = 0;
-												  respMsgBuff.msgId = setChargingStart;
-												  respMsgBuff.sendRespFlag = true;
-													sprintf(respMsgBuff.msgIdStr,cJSON_GetObjectItem(data,"msgId")->valuestring);
+													cmdMsgRespHandle(msgID);
 												}else{
 												 respcode = RESP_PARAM_ERROR;
 												 pc.printf("charging parameters error!\r\n");
@@ -285,7 +283,6 @@ void parseRecvMsgInfo(char *text)
 								}
             } else  if(strcmp(jsonBuffer,SETChargingEnd) == NULL) {
                 msgID = setChargingEnd;
-							  respMsgBuff.sendRespFlag = true;
                 sprintf(msgIdstr,cJSON_GetObjectItem(data,"msgId")->valuestring);
                 pc.printf("recv msg %s , msgid = %s\r\n",SETChargingEnd,msgIdstr);
 							if((chargerInfo.status & CHARGER_STATUS_MASK)==charging){
@@ -296,14 +293,11 @@ void parseRecvMsgInfo(char *text)
 							  stopCharging();// ericyang 20161216 move before cmdMsgRespHandle
 							#endif
 							  chargingEndType = END_IN_ADVANCE;  //20170719
-								respMsgBuff.msgId = setChargingEnd;
-								respMsgBuff.respCode = RESP_OK;
-								sprintf(respMsgBuff.msgIdStr,cJSON_GetObjectItem(data,"msgId")->valuestring);
 							}else{
 								respcode = RESP_ILLEGAL;
-								cmdMsgRespHandle(msgID);
 								pc.printf("not charging!Cannot be stopped!\r\n");
 							}
+							cmdMsgRespHandle(msgID);
             }
 						else  if(strcmp(jsonBuffer,SETUpdateVersion) == NULL){ //add by orangeCai , 20170328
 							msgID = setUpdateVersion;						
@@ -659,25 +653,19 @@ void cmdMsgRespHandle(MSGID msgid)
     if((msgid == invalidID)||(msgid >= unknownMsgID))
         return;
     memset(socketInfo.outBuffer,0,sizeof(socketInfo.outBuffer));
-    pc.printf("respMsgBuff.sendRespFlag=%d\r\n",respMsgBuff.sendRespFlag);
   //  if(msgid == setChargingTime) {
   //      sprintf(socketInfo.outBuffer,CMD_RESP_setChargingTime,respcode,msgIdstr);
   //  } else 
     if(msgid == setChargingStart) {
-			   if(respMsgBuff.sendRespFlag == true){
-						sprintf(socketInfo.outBuffer,CMD_RESP_setChargingStart,respMsgBuff.respCode,respMsgBuff.msgIdStr);
-					  respMsgBuff.sendRespFlag = false; //clear flag
-				 }else {
-					  sprintf(socketInfo.outBuffer,CMD_RESP_setChargingStart,respcode,msgIdstr);
-				 }
+			sprintf(socketInfo.outBuffer,CMD_RESP_setChargingStart,respcode,msgIdstr);
     } else if(msgid == setChargingEnd) {  //Modify 20171222
-				if(respMsgBuff.sendRespFlag == true){
-						sprintf(socketInfo.outBuffer,CMD_RESP_setChargingEnd,respMsgBuff.respCode,respMsgBuff.msgIdStr,curChargingType,curChargingEnergy,  // ericyang 20161216
-						curChargingDuration/60,chargerInfo.status,chargerInfo.connect,setChargingDuration,setChargingEnergy);
-					  respMsgBuff.sendRespFlag = false; //clear flag
-				}else
-					  sprintf(socketInfo.outBuffer,CMD_RESP_ILLEGAL_setChargingEnd,respcode,msgIdstr);  
-    }else if(msgid == setUpdateVersion){   //orangeCai 20170328
+			if(chargerInfo.status == charging)
+				sprintf(socketInfo.outBuffer,CMD_RESP_setChargingEnd,respcode,msgIdstr,chargerInfo.chargingType,chargerInfo.energy,  // ericyang 20161216
+				chargerInfo.duration/60,chargerInfo.status,chargerInfo.connect,setChargingDuration,setChargingEnergy);
+			else
+				sprintf(socketInfo.outBuffer,CMD_RESP_setChargingEnd,respcode,msgIdstr,curChargingType,curChargingEnergy,  // ericyang 20161216
+				curChargingDuration/60,chargerInfo.status,chargerInfo.connect,setChargingDuration,setChargingEnergy);
+		}else if(msgid == setUpdateVersion){   //orangeCai 20170328
 	    	sprintf(socketInfo.outBuffer,CMD_RESP_setUpdateVersion,respcode,msgIdstr);
 		}
 		#ifdef RTC_ENABLE

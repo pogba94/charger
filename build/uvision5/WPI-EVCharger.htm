@@ -3,7 +3,7 @@
 <title>Static Call Graph - [.\build\uvision5\WPI-EVCharger.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image .\build\uvision5\WPI-EVCharger.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060020: Last Updated: Mon Feb 05 21:03:21 2018
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060020: Last Updated: Mon Feb 05 21:43:13 2018
 <BR><P>
 <H3>Maximum Stack Usage =       1168 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -3138,7 +3138,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[e5]"></a>netWorkThread(const void*)</STRONG> (Thumb, 360 bytes, Stack size 0 bytes, main.o(i._Z13netWorkThreadPKv))
-<BR><BR>[Stack]<UL><LI>Max Depth = 848 + Unknown Stack Size
+<BR><BR>[Stack]<UL><LI>Max Depth = 864 + Unknown Stack Size
 <LI>Call Chain = netWorkThread(const void*) &rArr; parseRecvMsgInfo(char*) &rArr; cmdMsgRespHandle(MSGID) &rArr; TCPSocketConnection::send(char*, int) &rArr; lwip_send &rArr; lwip_sendto &rArr;  lwip_send (Cycle)
 </UL>
 <BR>[Calls]<UL><LI><a href="#[21c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mbed::Stream::printf(const char*, ...)
@@ -3227,8 +3227,8 @@ Global Symbols
 <LI><a href="#[22e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;disableCPPWM()
 </UL>
 
-<P><STRONG><a name="[24b]"></a>cmdMsgRespHandle(MSGID)</STRONG> (Thumb, 526 bytes, Stack size 96 bytes, evcharger.o(i._Z16cmdMsgRespHandle5MSGID))
-<BR><BR>[Stack]<UL><LI>Max Depth = 792 + Unknown Stack Size
+<P><STRONG><a name="[24b]"></a>cmdMsgRespHandle(MSGID)</STRONG> (Thumb, 508 bytes, Stack size 112 bytes, evcharger.o(i._Z16cmdMsgRespHandle5MSGID))
+<BR><BR>[Stack]<UL><LI>Max Depth = 808 + Unknown Stack Size
 <LI>Call Chain = cmdMsgRespHandle(MSGID) &rArr; TCPSocketConnection::send(char*, int) &rArr; lwip_send &rArr; lwip_sendto &rArr;  lwip_send (Cycle)
 </UL>
 <BR>[Calls]<UL><LI><a href="#[24f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rtos::Mutex::unlock()
@@ -3241,7 +3241,6 @@ Global Symbols
 <LI><a href="#[237]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_f2d
 </UL>
 <BR>[Called By]<UL><LI><a href="#[23f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;parseRecvMsgInfo(char*)
-<LI><a href="#[268]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;checkChargingStatus()
 </UL>
 
 <P><STRONG><a name="[250]"></a>enterFactoryMode()</STRONG> (Thumb, 412 bytes, Stack size 80 bytes, main.o(i._Z16enterFactoryModev))
@@ -3272,8 +3271,8 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[1ec]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;$Super$$main
 </UL>
 
-<P><STRONG><a name="[23f]"></a>parseRecvMsgInfo(char*)</STRONG> (Thumb, 2232 bytes, Stack size 56 bytes, evcharger.o(i._Z16parseRecvMsgInfoPc))
-<BR><BR>[Stack]<UL><LI>Max Depth = 848 + Unknown Stack Size
+<P><STRONG><a name="[23f]"></a>parseRecvMsgInfo(char*)</STRONG> (Thumb, 2274 bytes, Stack size 56 bytes, evcharger.o(i._Z16parseRecvMsgInfoPc))
+<BR><BR>[Stack]<UL><LI>Max Depth = 864 + Unknown Stack Size
 <LI>Call Chain = parseRecvMsgInfo(char*) &rArr; cmdMsgRespHandle(MSGID) &rArr; TCPSocketConnection::send(char*, int) &rArr; lwip_send &rArr; lwip_sendto &rArr;  lwip_send (Cycle)
 </UL>
 <BR>[Calls]<UL><LI><a href="#[25f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;cJSON_Parse
@@ -3322,14 +3321,13 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[23f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;parseRecvMsgInfo(char*)
 </UL>
 
-<P><STRONG><a name="[268]"></a>checkChargingStatus()</STRONG> (Thumb, 568 bytes, Stack size 40 bytes, main.o(i._Z19checkChargingStatusv))
-<BR><BR>[Stack]<UL><LI>Max Depth = 832 + Unknown Stack Size
-<LI>Call Chain = checkChargingStatus() &rArr; cmdMsgRespHandle(MSGID) &rArr; TCPSocketConnection::send(char*, int) &rArr; lwip_send &rArr; lwip_sendto &rArr;  lwip_send (Cycle)
+<P><STRONG><a name="[268]"></a>checkChargingStatus()</STRONG> (Thumb, 488 bytes, Stack size 40 bytes, main.o(i._Z19checkChargingStatusv))
+<BR><BR>[Stack]<UL><LI>Max Depth = 624 + Unknown Stack Size
+<LI>Call Chain = checkChargingStatus() &rArr; startCharging() &rArr; gpio_write &rArr; mbed_assert_internal &rArr; mbed_die &rArr;  gpio_write (Cycle)
 </UL>
 <BR>[Calls]<UL><LI><a href="#[239]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;gpio_write
 <LI><a href="#[21c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mbed::Stream::printf(const char*, ...)
 <LI><a href="#[269]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;initailizeChargerInfo()
-<LI><a href="#[24b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;cmdMsgRespHandle(MSGID)
 <LI><a href="#[244]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;startCharging()
 <LI><a href="#[242]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;pauseCharging(bool)
 <LI><a href="#[238]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;stopCharging()
@@ -3390,8 +3388,8 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[e4]"></a>exceptionHandleThread(const void*)</STRONG> (Thumb, 180 bytes, Stack size 0 bytes, main.o(i._Z21exceptionHandleThreadPKv))
-<BR><BR>[Stack]<UL><LI>Max Depth = 832 + Unknown Stack Size
-<LI>Call Chain = exceptionHandleThread(const void*) &rArr; checkChargingStatus() &rArr; cmdMsgRespHandle(MSGID) &rArr; TCPSocketConnection::send(char*, int) &rArr; lwip_send &rArr; lwip_sendto &rArr;  lwip_send (Cycle)
+<BR><BR>[Stack]<UL><LI>Max Depth = 688 + Unknown Stack Size
+<LI>Call Chain = exceptionHandleThread(const void*) &rArr; chargingExceptionHandle() &rArr; saveChargerInfoToEEPROM() &rArr; writeToEEPROM(unsigned char, char*, unsigned char) &rArr; mbed::I2C::write(int, const char*, int, bool) &rArr; i2c_write &rArr; I2C_MasterTransferBlocking &rArr; __aeabi_assert &rArr; __assert_puts &rArr; fflush &rArr; _do_fflush &rArr; _fflush &rArr; _writebuf &rArr; _sys_write &rArr; serial_init &rArr;  BOARD_BootClockRUN (Cycle)
 </UL>
 <BR>[Calls]<UL><LI><a href="#[239]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;gpio_write
 <LI><a href="#[21c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mbed::Stream::printf(const char*, ...)
