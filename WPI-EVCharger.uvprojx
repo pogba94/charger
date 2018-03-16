@@ -403,7 +403,7 @@
             <TextAddressRange>0</TextAddressRange>
             <DataAddressRange>0</DataAddressRange>
             <pXoBase></pXoBase>
-            <ScatterFile>I:\Shared Plugs\WPI-SharedPlugs\mbed\TARGET_K64F\TOOLCHAIN_ARM_STD\MK64FN1M0xxx12.sct</ScatterFile>
+            <ScatterFile>.\mbed\TARGET_K64F\TOOLCHAIN_ARM_STD\MK64FN1M0xxx12.sct</ScatterFile>
             <IncludeLibs></IncludeLibs>
             <IncludeLibsPath></IncludeLibsPath>
             <Misc></Misc>

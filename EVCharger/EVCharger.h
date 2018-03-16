@@ -210,6 +210,7 @@ int pauseCharging(bool onoff);
 #endif
 
 //add by orangeCai,20170525
+extern volatile bool checkChargingFinishFlag;
 #ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
 extern volatile bool chargingExceptionFlag;  //the flag would be set when exception happened while charging
 extern volatile bool rechargingFlag;    // the flag would be set when exception disappeared while charging

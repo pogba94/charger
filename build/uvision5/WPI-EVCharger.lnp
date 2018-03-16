@@ -104,7 +104,7 @@
 ".\build\uvision5\msg_in.o"
 ".\build\uvision5\msg_out.o"
 ".\build\uvision5\watchdog.o"
---scatter "I:\Shared Plugs\WPI-SharedPlugs\mbed\TARGET_K64F\TOOLCHAIN_ARM_STD\MK64FN1M0xxx12.sct"
+--scatter ".\mbed\TARGET_K64F\TOOLCHAIN_ARM_STD\MK64FN1M0xxx12.sct"
 --summary_stderr --info summarysizes --map --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
 --list ".\build\WPI-EVCharger.map" -o .\build\uvision5\WPI-EVCharger.axf

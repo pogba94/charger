@@ -110,6 +110,7 @@ float startEnergyReadFromMeter = 0;
 float totalEnergyReadFromMeter = 0;
 bool pwmState = false;
 
+volatile bool checkChargingFinishFlag = false;
 volatile bool pauseChargingFlag = false;
 volatile bool startS2SwitchWaitCounterFlag = false;   //orangecai 20170807
 volatile int pauseChargingCounter = 0;   //orangecai 20170608
@@ -335,7 +336,10 @@ void timerOneSecondThread(void const *argument)
 						  chargingErrorTimer = 0;  //clear timer
 						  rechargingWaitCounter = 0;
 						  eventHandle.stopChargingFlag = true;  //notify END charging msg to server
-						  chargerInfo.status &= 0xFFFC;
+						  if(chargerInfo.status == 0x4082)
+								chargerInfo.status = idle;
+							else
+								chargerInfo.status &= 0xFFFC;
 						  chargingEndType = getChargingEndType(chargerInfo.status);//orangecai 20170719
 						  initailizeChargerInfo();
               pc.printf("Exception Timeout,stop charging!\r\n");						
@@ -357,6 +361,8 @@ void timerOneSecondThread(void const *argument)
 				if(startS2SwitchOnOffCounterFlag == true)
 						S2SwitchOnOffCounter++;
 #endif
+				if(systemTimer % 5 == 0)
+					checkChargingFinishFlag = true;
         Thread::wait(1000);
         systemTimer++;
         if(chargerInfo.status == charging) // ericyang 20170111 modify
@@ -1265,7 +1271,10 @@ int main(void)
 #ifndef NOT_CHECK_NETWORK
         checkNetworkAvailable();
 #endif
-
+			if(checkChargingFinishFlag == true){
+				checkChargingFinish();
+				checkChargingFinishFlag = false;
+			}
 #ifdef ENABLE_FULL_CHARGING_DETECT
 				if(chargerInfo.status == charging && fullChargingFlag == true){
 					fullChargingFlag = false;
