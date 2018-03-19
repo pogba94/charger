@@ -2,7 +2,7 @@
 #define FLASHLAYOUT_H
 #include "FreescaleIAP.h"
 #include "UserConfig.h"
-/*******************************************************
+/*--------------------------------------------------------------------------------------------------------
     Flash Layout
     bootloader(32K)     0x00000~0x07FFF
     application(128K)   0x08000~0x27FFF
@@ -10,8 +10,8 @@
     Checksum (4B)       0x48000~0x48003   code checksum & ota code checksum: xx xx xx xx 
     OTA CODE VER(60B)   0x48004~0x4803F
     Param (4K)          0xFF000~0xFFFFF
-		ServerIP (4K)				0xFE000~0xFF000    IP1|IP2|IP2|IP3|PORT1|PORT2|CHECKSUM1|CHECKSUM2 Total 8 bytes
-********************************************************/
+		ServerIP (4K)				0xFE000~0xFF000   IP1|IP2|IP2|IP3|PORT1|PORT2|CHECKSUM1|CHECKSUM2 Total 8 bytes
+---------------------------------------------------------------------------------------------------------*/
 #define CHIP_MK64FX512                //running in mk64fx512
 
 #define BOOTLOADER_START_ADDRESS    0

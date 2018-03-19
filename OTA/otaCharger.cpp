@@ -1,15 +1,20 @@
-/*
-* Note:last modification by orange cai in 20170328
-*/
-
-//#include "FreescaleIAP.h"
+/*----------------------------------------------------------------------------
+ * Includes
+-----------------------------------------------------------------------------*/
 #include "flashLayout.h"
 #include "UserConfig.h"
 #include "lib_crc16.h"
 #include "otaCharger.h"
 
 void updateCode(void);
-
+/*----------------------------------------------------------------------------
+ * Function definition
+-----------------------------------------------------------------------------*/
+/*!
+	@birfe OTA init function
+	@input None
+	@output None
+*/
 void OTAInit(void)
 {
     char* cdata = (char*)VERSION_STR_ADDRESS;
@@ -48,7 +53,11 @@ void OTAInit(void)
     }
 
 }
-
+/*!
+	@birfe Software reset for updating
+	@input None
+	@output None
+*/
 void updateCode(void)
 {
     pc.printf("update, system will be reset now, please wait...\r\n");

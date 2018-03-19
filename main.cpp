@@ -1,35 +1,29 @@
-/*------------------------------------------------------------------------------------*/
-/*  Ethernet EV Charger Solution                          */
-/*------------------------------------------------------------------------------------*/
+/**
+	---------------------------------------------------------------------------
+	* Describtion:            Firmware for AC EV Charger
+	* Company:                WPI-ATU
+	* Author:                 Orange
+	* Version:                V2.0
+	* Date:                   2018-03-16
+	* Function List:
+			1. RS485 Communication
+			2. Ethernet Communication,RJ45 interface
+	    3. Wechat control
+			4. Follow the GB/T 18487.1-2015 Standard
+			5. Use Mbed OS 2.0
+	* History:
+	---------------------------------------------------------------------------
+**/
 
-/*--COMPANY-----AUTHOR------DATE------------REVISION----NOTES-------------------------*/
-/*  WPI        Eric.Yang  2016.07.03       rev 1.0     initial                       */
-/*  Function:
-				mbed
-        Ethernet TCP Client
-        JSON
-        Modbus(RS485)
-        CRC16
-        LCD12832
-        EV Charger (Wechat websocket)
-				OTA & IAP			
-				CP Signal Handle
-*/
-
-/*--INCLUDES----------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------------
+ * Includes
+-----------------------------------------------------------------------------*/
 #include "UserConfig.h"
 #include "EVCharger.h"
 #include "cJSON.h"
 #include "lib_crc16.h"
 #include "flashLayout.h"
 #include "otaCharger.h"
-
-#ifdef LCD_ENABLE
-#include "C12832.h"
-#include "Arial12x12.h"
-#include "Small_7.h"
-C12832 lcd(D11, D13, D12, D7, D10);
-#endif
 
 #ifdef WDOG_ENABLE
 #include "WatchDog.h"
@@ -40,68 +34,44 @@ extern "C"{
 	#include "MK64F12.h"
 }
 #endif
-/*--DEFINES-----------------------------------------------------------------------------*/
-#define RESET_TIMER 120
 
-//#define BOARD_FRDM_K64F            //use board frdm_k64f for test!
+/*----------------------------------------------------------------------------
+ * Macro Definitions
+-----------------------------------------------------------------------------*/
+#define    RESET_TIMER      120
 
-//#define ABS(x) ((x)<0 ? -(x) :x)   // ericyang 20161209
-//#define ADC_SAMPLE_TIMES 2  // ericyang 20161214 for CP TEST < 100MS
-/*--CONSTANTS---------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------------
+ * Global Variable
+-----------------------------------------------------------------------------*/
 
 const char* DEFAULT_SERVER_ADDRESS = "112.74.170.197";
-
 const int DEFAULT_SERVER_PORT = 22221;
-
 
 char ECHO_SERVER_ADDRESS[20];
 int ECHO_SERVER_PORT;
-//const char* DEFAULT_SERVER_ADDRESS = "192.168.1.100";
-//const int DEFAULT_SERVER_PORT = 13348;//13348;
 
-
-/*--INITS-------------------------------------------------------------------------------*/
-Serial pc(USBTX, USBRX);      //create PC interface
-//DigitalOut switchRelayOnoff(D2);//PTB9
+Serial pc(USBTX, USBRX);      //uart for debug
+Serial RS485(PTE24,PTE25);  //uart for RS485
 DigitalOut switchRelayOnoff(PTB23);//PTB23
-//AnalogIn analog0(PTB0);
-//AnalogIn analog1(PTB1);
 AnalogIn cpADC(A0);  // adc for cp detect PTB2
-//AnalogIn cpADC(PTB3);
-//AnalogIn analog4(PTC2);
-//AnalogIn cpADC(PTC1);
-//PwmOut cpPWM(A5);  // cp pwm signal generator PTC10
 PwmOut cpPWM(D6);  // cp pwm signal generator PTC2
-//Serial RS485(D1,D0); // Tx, Rx
-//Serial RS485(PTC4,PTC3); // Tx, Rx D9/D7
-//Serial RS485(PTD3,PTD2);  // D12/D11
-Serial RS485(PTE24,PTE25);  // D15/D14
 EthernetInterface eth;          //create ethernet
-TCPSocketConnection tcpsocket;
+TCPSocketConnection tcpsocket;  //create tcp socket
 
-#if defined(BOARD_FRDM_K64F)
-	DigitalOut red(PTB10);        //warning led
-	DigitalOut green(PTB11);    //charging led
-	DigitalOut blue(PTC10);    //connect led
-	DigitalOut server(PTC11);    //server connected led
-#else
-	DigitalOut red(LED_RED);        //warning led
-	DigitalOut green(LED_GREEN);    //charging led
-	DigitalOut blue(LED_BLUE);    //connect led
-	DigitalOut server(PTB20);    //server connected led
-#endif
+/* LED for indicate device status */
+DigitalOut red(LED_RED);        //warning led
+DigitalOut green(LED_GREEN);    //charging led
+DigitalOut blue(LED_BLUE);    //connect led
+DigitalOut server(PTB20);    //server connected led
 
-InterruptIn sw2(SW2);
-
-DigitalIn factoryMode(PTD7);  //
+DigitalIn factoryMode(PTD7);  //for entering factory mode
 
 #ifdef EEPROM_ENABLE
 I2C i2c1(PTC11,PTC10);    //orangecai I2C1 Read Epprom data
 #endif
-//InterruptIn sw3(SW3);
 
 Mutex myMutex;
-char EVChargerModelNO[20]; // 20160713 ericyang set MAC as EVCharger Model NO
+char EVChargerModelNO[20]; // set MAC as EVCharger Model NO
 SystemEventHandle eventHandle;
 SocketInfo socketInfo;
 int systemTimer = 0;
@@ -112,77 +82,68 @@ bool pwmState = false;
 
 volatile bool checkChargingFinishFlag = false;
 volatile bool pauseChargingFlag = false;
-volatile bool startS2SwitchWaitCounterFlag = false;   //orangecai 20170807
-volatile int pauseChargingCounter = 0;   //orangecai 20170608
-volatile int waitS2SwitchOnCounter = 0; //orangecai 20170807
-#ifdef GB18487_1_2015_AUTH_FUNC
-	volatile bool S2SwitchEnabledFlag = false; // ericyang 20170711
-	volatile bool startS2SwitchOnOffCounterFlag = false;
-	volatile int S2SwitchOnOffCounter = 0;
-	volatile int gChargingState = EV_IDLE;
-#endif
+volatile bool startS2SwitchWaitCounterFlag = false;
+volatile int pauseChargingCounter = 0;
+volatile int waitS2SwitchOnCounter = 0;
 
-#ifdef AUTOTEST_SOCKET_JSON_MSG
-	bool testModeFlag = false;
-#endif
+volatile bool S2SwitchEnabledFlag = false;
+volatile bool startS2SwitchOnOffCounterFlag = false;
+volatile int S2SwitchOnOffCounter = 0;
+volatile int gChargingState = EV_IDLE;
 
-char tempBuffer[256];//need to be fixed, save data flash use this buffer;
+char tempBuffer[256];
 char dataBuffer[256];
 #ifdef RTC_ENABLE
 	char timeStampMs[32];
 #endif
 
-#if 0
-	typedef struct {
-			bool ethernetInitedFlag;  // ethernet init ok=true;
-			bool ethernetConnectedFlag; // network is not ready, RJ45 no insert in or other problem
-	} EthernetException;
-	EthernetException ethernetException;
-#endif
-
 #ifdef NETWORK_COUNT_ENABLE
 volatile NetworkCount networkCount = {0,0,0}; 	
 #endif	
-	
-//add by orangeCai,20170525
-#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-	volatile bool chargingExceptionFlag = false;   //the flag would be set when exception happened while charging
-	volatile bool rechargingFlag = false;    // the flag would be set when exception disappeared while charging
-	volatile bool startContinueChargingFlag = false; 
-	volatile uint32_t chargingErrorTimer = 0;
-	volatile uint32_t rechargingTimer = 0;
-	volatile uint8_t rechargingWaitCounter = 0;
-#endif
-	volatile bool updateCodeFlag = false;   //Start to update code when the flag is set and the status is not charging,orangeCai 20170602
-  volatile bool otaSuccessFlag = false;   //true:OTA code download success
+
+/*the flag would be set when exception happened while charging*/
+volatile bool chargingExceptionFlag = false;
+ /*the flag would be set when exception disappeared while charging*/
+volatile bool rechargingFlag = false;
+volatile bool startContinueChargingFlag = false; 
+volatile uint32_t chargingErrorTimer = 0;
+volatile uint32_t rechargingTimer = 0;
+volatile uint8_t rechargingWaitCounter = 0;
+
+ /*Update code while the flag is set */
+volatile bool updateCodeFlag = false;
+ /* true:OTA code download success */
+ volatile bool otaSuccessFlag = false;
+
 #ifdef ENABLE_FULL_CHARGING_DETECT
 	volatile uint16_t fullChargingDetectCounter = 0;
 	volatile bool fullChargingFlag = false;
 #endif
 
-/*--FUNCTION DECLARATIONS---------------------------------------------------------------*/
-void initServer(void); // 20161107 ADD FOR SERVER IP COULD BE CONFIGED
-void initETH(void);    //initializes Ethernet
+/*----------------------------------------------------------------------------
+ * Function declaration
+-----------------------------------------------------------------------------*/
+void initServer(void);
+void initETH(void);
 void enterFactoryMode(void);
 void timerOneSecondThread(void const *argument);
 void heartbeatThread(void const *argument);
-#ifdef LCD_ENABLE
-	void lcdshowonoffstate(bool onoffstate);
-#endif
 void checkNetworkAvailable(void);
 void checkChargingTime(void);
-//void getChargerInfo(void);
 void checkChargerConnectStatus(void);
 int getMeterInfo(void);
 void sw2_release(void);
-
-//void disableCPPWM(void);
-//void enableCPPWM(float duty);
 CPSignal checkCPSignal(void);
 
-/*--FUNCTION DEFINITIONS----------------------------------------------------------------*/
-
+/*----------------------------------------------------------------------------
+ * Function Definition
+-----------------------------------------------------------------------------*/
 #ifdef EEPROM_ENABLE
+/*!
+	@birfe Config pins for I2C1
+	@input None
+	@output None
+*/
 static void pinConfig(void)
 {
 	/* config I2C1 SCL pin , PTC10 */
@@ -193,6 +154,11 @@ static void pinConfig(void)
 #endif
 
 #ifdef RTC_ENABLE
+/*!
+	@birfe get current RTC time
+	@input Pointer to string for storing the RTC time
+	@output None
+*/
 void getTimeStampMs(char* timeStampMs)
 {
   time_t seconds;
@@ -201,7 +167,11 @@ void getTimeStampMs(char* timeStampMs)
 	strftime(buffer, 32, "%y%m%d%H%M%S", localtime(&seconds));
 	sprintf(timeStampMs,"%s%d",buffer,us_ticker_read()%1000000/1000);
 }
-
+/*!
+	@birfe Init RTC Function
+	@input init value for RTC, 
+	@output None
+*/
 void rtcInit(uint32_t timeSeconds)
 {
 	char* initTime;
@@ -213,33 +183,32 @@ void rtcInit(uint32_t timeSeconds)
 
 #endif
 
-void sw2_release(void)
-{
-	#ifndef GB18487_1_2015_AUTH_FUNC
-    blue = !blue;
-	#endif
-	//	switchRelayOnoff = !switchRelayOnoff;
-}
-
-/*****************************************INIT_ETH***********************************************/
+/*!
+	@birfe Init Ethernet interface,used DHCP
+	@input None
+	@output None
+*/
 void initETH(void)
 {
-    uint8_t MAC_ADDRESS[6];   // 20160713 ericyang set MAC as EVCharger Model NO
-//    eth.init("192.168.1.101", "255.255.255.0", "192.168.1.1");                                         //set up static IP
-//    pc.printf("eth.init: %d\r\n",eth.init());
+    uint8_t MAC_ADDRESS[6];
     eth.init(); //DHCP
-    eth.connect();                                                              //connect ethernet
-    pc.printf("MAC Addr:%s\r\nIP Addr:%s\r\n",eth.getMACAddress(),eth.getIPAddress());    //get client IP address
+    eth.connect();  //connect ethernet
+    pc.printf("MAC Addr:%s\r\nIP Addr:%s\r\n",eth.getMACAddress(),eth.getIPAddress());//get client IP address
     if(strcmp(eth.getIPAddress(),NULL) == NULL) {
         pc.printf("RJ45 error! system will be reset now, please wait...\r\n");
         NVIC_SystemReset();
     }
-    sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
-    sprintf(EVChargerModelNO,"%02x%02x%02x%02x%02x%02x",MAC_ADDRESS[0],MAC_ADDRESS[1],MAC_ADDRESS[2],MAC_ADDRESS[3],MAC_ADDRESS[4],MAC_ADDRESS[5]);
-//    pc.printf("%s\r\n", EVChargerModelNO);
+    sscanf(eth.getMACAddress(),"%02x:%02x:%02x:%02x:%02x:%02x",
+		&MAC_ADDRESS[0],&MAC_ADDRESS[1],&MAC_ADDRESS[2],&MAC_ADDRESS[3],&MAC_ADDRESS[4],&MAC_ADDRESS[5]);
+    sprintf(EVChargerModelNO,"%02x%02x%02x%02x%02x%02x",
+		MAC_ADDRESS[0],MAC_ADDRESS[1],MAC_ADDRESS[2],MAC_ADDRESS[3],MAC_ADDRESS[4],MAC_ADDRESS[5]);
 }
 
-/*****************************************init Server IP ADDRESS****************************************/
+/*!
+	@birfe Init server IP address
+	@input None
+	@output None
+*/
 void initServer(void)
 {
     char* cdata = (char*)SERVER_IP_ADDRESS;
@@ -255,32 +224,38 @@ void initServer(void)
     }
     pc.printf("initServer: %s:%d\r\n",ECHO_SERVER_ADDRESS,ECHO_SERVER_PORT);
 }
-/*****************************************initEventHandle***********************************************/
+
+/*!
+	@birfe Init eventHandle structure
+	@input None
+	@output None
+*/
 void initEventHandle(void)
 {
     eventHandle.heatbeatFlag = false;
     eventHandle.checkMeterFlag = false;
     eventHandle.updateChargerInfoFlag = false;
-    eventHandle.updateChargerStatusFlag = false;  // ericyang 20160824
-//    eventHandle.updateConnectStatusFlag = false;
+    eventHandle.updateChargerStatusFlag = false;
     eventHandle.stopChargingFlag = false;
-//    eventHandle.checkLatestVersionFromServerFlag = false; // ericyang 20160914
-    eventHandle.getLatestFWFromServerFlag = false; // ericyang 20160914
-	  eventHandle.updateVersionDoneFlag = false;  //orangeCai 20170328
-	  eventHandle.firstConnectFlag = true;   //orange 20171213
+    eventHandle.getLatestFWFromServerFlag = false;
+	  eventHandle.updateVersionDoneFlag = false;
+	  eventHandle.firstConnectFlag = true;
 }
-/***********************************1s timer thread***************************/
+
+/*!
+	@birfe 1s thread 
+	@input None
+	@output None
+*/
 void timerOneSecondThread(void const *argument)
 {
     while (true) {	
 			if(systemTimer >= 3){
-						//if(systemTimer % 60 == 0)
 						eventHandle.checkMeterFlag = true; // 1s check meter info
         }
 				
         if(chargerException.serverConnectedFlag == false) {
             resetTimer++;
-//					  pc.printf("resetTimer=%d\r\n",resetTimer);
         }
 #ifdef RTC_ENABLE
 		getTimeStampMs(timeStampMs);
@@ -303,11 +278,9 @@ void timerOneSecondThread(void const *argument)
 				}
 #endif
 
-#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
 				if(rechargingFlag == true){
 						if(rechargingTimer > NORMAL_TIME_HOLDED){
-							  startContinueChargingFlag = true;  // replace with preStartCharging()
-							//	preStartCharging();   // continue charging
+							  startContinueChargingFlag = true;
 								rechargingFlag = false;
 								rechargingWaitCounter = 0;
 								rechargingTimer = 0;
@@ -315,8 +288,8 @@ void timerOneSecondThread(void const *argument)
 								if(++rechargingWaitCounter > RECHARGING_WAIT_TIMES_ALLOWED){
 									  rechargingWaitCounter = 0;
 										eventHandle.stopChargingFlag = true; //notify END charging msg to server
-									  chargingEndType = getChargingEndType(chargerInfo.status);//orangecai 20170719
-										initailizeChargerInfo();
+									  chargingEndType = getChargingEndType(chargerInfo.status);
+										initChargerInfo();
                     pc.printf("\r\nrecharging fail ! stop charging!\r\n\r\n");									
 								}else{
 										chargingExceptionFlag = true;
@@ -333,15 +306,15 @@ void timerOneSecondThread(void const *argument)
 				if(chargingExceptionFlag  == true){
 					if(chargingErrorTimer > MAX_EXCEPTION_TIME_ALLOWED){
 							chargingExceptionFlag = false;
-						  chargingErrorTimer = 0;  //clear timer
+						  chargingErrorTimer = 0;
 						  rechargingWaitCounter = 0;
 						  eventHandle.stopChargingFlag = true;  //notify END charging msg to server
 						  if(chargerInfo.status == 0x4082)
 								chargerInfo.status = idle;
 							else
 								chargerInfo.status &= 0xFFFC;
-						  chargingEndType = getChargingEndType(chargerInfo.status);//orangecai 20170719
-						  initailizeChargerInfo();
+						  chargingEndType = getChargingEndType(chargerInfo.status);
+						  initChargerInfo();
               pc.printf("Exception Timeout,stop charging!\r\n");						
 					}else if(chargerInfo.status == connected){
 							rechargingFlag = true;
@@ -352,22 +325,17 @@ void timerOneSecondThread(void const *argument)
 					}else
 						chargingErrorTimer++;
 				}
-#endif
-#ifdef AUTOTEST_SOCKET_JSON_MSG
-        if(systemTimer % 300 == 0)
-            testModeFlag = true;
-#endif
-#ifdef GB18487_1_2015_AUTH_FUNC
+
 				if(startS2SwitchOnOffCounterFlag == true)
 						S2SwitchOnOffCounter++;
-#endif
+
 				if(systemTimer % 5 == 0)
 					checkChargingFinishFlag = true;
         Thread::wait(1000);
         systemTimer++;
-        if(chargerInfo.status == charging) // ericyang 20170111 modify
+        if(chargerInfo.status == charging)
           chargerInfo.duration++;
-				if(pauseChargingFlag == true){   //orangecai 20170608
+				if(pauseChargingFlag == true){
 					pauseChargingCounter++;
 				}
 				if(startS2SwitchWaitCounterFlag == true){
@@ -376,7 +344,11 @@ void timerOneSecondThread(void const *argument)
     }
 } 
 
-/***********************************30s timer thread***************************/
+/*!
+	@birfe heartbeat thread
+	@input None
+	@output None
+*/
 void heartbeatThread(void const *argument)
 {
 #ifdef DISABLE_NETWORK_CONMUNICATION_FUNC
@@ -400,37 +372,11 @@ void heartbeatThread(void const *argument)
     }
 }
 
-/***********************************display 12832 server connect info  ***************************/
-#ifdef LCD_ENABLE
-void lcdshowonoffstate(bool onoffstate)
-{
-    myMutex.lock();
-    lcd.locate(0,21);
-    if(onoffstate == false) {
-        red = 0;
-        green = 1;
-        pc.printf("disconnected!\r\n");
-        lcd.printf("IP: %s Offline!",eth.getIPAddress());
-    } else {
-        red = 1;
-        green = 0;
-        pc.printf("connected!\r\n");
-        lcd.printf("IP: %s Online!",eth.getIPAddress());
-    }
-    myMutex.unlock();
-}
-#endif
-
-/***********************************update meter info Modbus(RS485)***************************/
-#ifdef TEST_NO_485
-int getMeterInfo(void)
-{
-		chargerException.meterCrashedFlag = false; 
-		chargerException.chargingCurrentErrorFlag = false;
-		chargerException.chargingVoltageErrorFlag = false;
-		return 0;
-}
-#else
+/*!
+	@birfe Get meter information
+	@input None
+	@output None
+*/
 int getMeterInfo(void)
 {
     char ModbusData[8] = {0x2C,0x03,0x00,0x00,0x00,0x07};// slave addr,function code,Hi PDU addr,low PDU addr,Hi N reg,Lo N reg,Lo CRC,Hi CRC
@@ -441,16 +387,14 @@ int getMeterInfo(void)
 		static int voltageErrorTimes = 0;
 		static int currentErrorTimes = 0;
 		
-//    static int lowCurrentTimes = 0;
     ModbusData[0] = atoi(chargerInfo.meterNumber + 6); // get last two number [6][7] as meter addr
     pc.printf("meter address: %x\r\n",ModbusData[0]);
 
     crc16 = calculate_crc16_Modbus(ModbusData, 6);
-    //pc.printf("crc  : %04x\r\n",crc16);
     ModbusData[6] = crc16 & 0xff;
     ModbusData[7] = (crc16 >> 8) & 0xff;
 
-    //  ////myMutex.lock();
+    //myMutex.lock();
     for(i = 0; i < 8; i++)
         RS485.putc(ModbusData[i]);
 
@@ -467,28 +411,20 @@ int getMeterInfo(void)
             count++;
         }
     }
-
-    //  ////myMutex.unlock();
+    //myMutex.unlock();
     crc16 = calculate_crc16_Modbus(regvalue,17);
-//		for(int i =0;i<19;i++)
-//				pc.printf("reg[%d] = %x\t",i,regvalue[i]);
-    //pc.printf("receiver crc  : %04x\r\n",crc16);
     if(( (crc16 & 0xff) == regvalue[17]) && (((crc16 >> 8) & 0xff) == regvalue[18])) {
-        //      pc.printf("Modbus read successful!\r\n");
         meterErrorTimes = 0;
         if(chargerException.meterCrashedFlag == true) {
-            //    eventHandle.updateChargerStatusFlag = true; // ericyang 20160824
             chargerException.meterCrashedFlag = false; // ericyang 20160824 meter recover ok
         }
 
         totalEnergyReadFromMeter = (regvalue[5]<<24 | regvalue[6]<<16 | regvalue[3]<<8 | regvalue[4])*0.1;
         chargerInfo.energy =  totalEnergyReadFromMeter - startEnergyReadFromMeter;
-//				chargerInfo.energy += 0.02;//for test!
         chargerInfo.voltage = (regvalue[7]<<8 | regvalue[8])*0.01;
         chargerInfo.current = (regvalue[11]<<24 | regvalue[12]<<16 | regvalue[9]<<8 | regvalue[10])*0.001;
-
         chargerInfo.power = ((regvalue[15]&0x7F)<<24 | regvalue[16]<<16 | regvalue[13]<<8 | regvalue[14])*0.1;
-        //eventHandle.updateChargerInfoFlag = true; // ericyang 20161215 move to 1 second thread
+
         if((chargerInfo.voltage > 264) || (chargerInfo.voltage < 176)) {  // voltage: 176~264
 						if((chargerException.chargingVoltageErrorFlag == false)&&(voltageErrorTimes++ >= 5)) {
                 chargerException.chargingVoltageErrorFlag = true;
@@ -499,9 +435,8 @@ int getMeterInfo(void)
             chargerException.chargingVoltageErrorFlag = false;
         }
         if(chargerInfo.status == charging) {
-            //if((chargerInfo.current > 17) ||(chargerInfo.current < 0.01)){ // current: 0~20 0.1 just for test
 					#ifdef CHARGING_CURRENT_16A
-						if(chargerInfo.current > 15) // current: 0~18 13+2 >5s  fix 18487.1-2015 A3.10.7
+						if(chargerInfo.current > 18) // current: 0~18 13+2 >5s  fix 18487.1-2015 A3.10.7
 					#endif
 					#ifdef CHARGING_CURRENT_32A
 						if(chargerInfo.current > 35.2)// current > 32*1.1=35.2A && >5s fix fix 18487.1-2015 A3.10.7
@@ -535,41 +470,36 @@ int getMeterInfo(void)
         if(chargerException.meterCrashedFlag == false) {
             if(meterErrorTimes++ >= 4) {
                 chargerException.meterCrashedFlag = true;
-                //eventHandle.updateChargerStatusFlag = true; // ericyang 20160824
-                //chargerInfo.status = meterError; // ericyang 20160824
             }
             pc.printf("\r\nMeter Crashed!!!\r\n");
         }
         return -1; // read meter error!!!
     }
-
-#ifdef LCD_ENABLE
-    lcd.locate(0,1);
-    lcd.printf("EE:%0.1fKWH Vol:%0.2fV Cur:%0.3fA",chargerInfo.energy,chargerInfo.voltage,chargerInfo.current);
-    lcd.locate(0,11);
-    //lcd.printf("Charging Time: %d min",chargerInfo.duration);
-    lcd.printf("Charging Time: %02d : %02d : %02d",chargerInfo.duration/3600,(chargerInfo.duration/60)%60,chargerInfo.duration%60);
-#endif
     return 0;
 }
-#endif
 
-/******************************************initPWM****************************************/
+/*!
+	@birfe Disable CP PWM
+	@input None
+	@output None
+*/
 void disableCPPWM(void)
 {
     cpPWM.period_ms(0);
     cpPWM = 1;
     pwmState = false;
 }
-
+/*!
+	@birfe Enable CP PWM
+	@input Duty,range is 0~1.0
+	@output None
+*/
 void enableCPPWM(float duty)
 {
     cpPWM.period_ms(1);
     cpPWM = duty;
     pwmState = true;
 }
-
-
 
 int getMaxNo(float *array,int len)
 {
@@ -595,6 +525,11 @@ int getMinNo(float *array,int len)
 
 #define ADC_SAMPLE_RATE 20     // 1ms 20 times
 #define ADC_SAMPLE_USE_TOP_NUM  3
+/*!
+	@birfe Detect CP signal,sample 20 times in 1s
+	@input None
+	@output None
+*/
 CPSignal checkCPSignal(void)
 {
     float cpADCRead;
@@ -616,7 +551,7 @@ CPSignal checkCPSignal(void)
 		for(i=0; i<ADC_SAMPLE_RATE; i++) 
 				pc.printf("cp[%d] = %f\r\n",i,cp[i]);
 		#endif
-		for(i=0;i<ADC_SAMPLE_USE_TOP_NUM;i++){  //ericyang 20170216 FIX_GB18487_TEST_PROBLEM
+		for(i=0;i<ADC_SAMPLE_USE_TOP_NUM;i++){  //FIX_GB18487_TEST_PROBLEM
 				maxPos = getMaxNo(cp,20);
 				top3Num[i] = cp[maxPos];
 				cp[maxPos] = 0;	 
@@ -634,14 +569,11 @@ CPSignal checkCPSignal(void)
 			 sumValue += top3Num[i];
 		}		
 		averValue = sumValue / ADC_SAMPLE_USE_TOP_NUM;
-		//if((averValue > 2.06)&&(averValue < 2.46)) { // (12-0.7) / 5  = 2.26
-		if((averValue > 2.14)&&(averValue < 2.46)) { // (12-0.7) / 5  = 2.26  +/- (0.8/5) ericyang 20170216
+		if((averValue > 2.14)&&(averValue < 2.46)) { // (12-0.5) / 5  = 2.30 +/- (0.8/5)
 				ret = PWM12V;
-		//} else if((averValue > 1.46)&&(averValue < 1.86)) { // (9-0.7) / 5  = 1.66
-			} else if((averValue > 1.54)&&(averValue < 1.86)) { // (9-0.7) / 5  = 1.66 +/- (0.8/5) ericyang 20170216
+			} else if((averValue > 1.54)&&(averValue < 1.86)) { // (9-0.5) / 5  = 1.70 +/- (0.8/5)
 				ret = PWM9V;
-		//} else if((averValue > 0.86) && (averValue < 1.26)) { // (6-0.7) / 5  = 1.06
-			}	else if((averValue > 0.94) && (averValue < 1.26)) { // (6-0.7) / 5  = 1.06 +/- (0.8/5) ericyang 20170216
+			}	else if((averValue > 0.94) && (averValue < 1.26)) { // (6-0.5) / 5  = 1.10 +/- (0.8/5)
 				ret = PWM6V;
 		}	else if(averValue < 0.1){
 				ret = PWM0V;
@@ -652,24 +584,24 @@ CPSignal checkCPSignal(void)
 //		pc.printf("voltage:%f v\r\n",value);
     return ret;
 }
-/***********************************check charger connect to car***************************/
+/*!
+	@birfe Check the connect status of charger,total 3 status,NOT_CONNECTED,CONNECTED_6V,CONNECTED_9V
+	@input None
+	@output None
+*/
 void checkChargerConnectStatus(void)
 {
 		static int connectStatus = NOT_CONNECTED;  // 20170216 fixed
-#ifdef GB18487_1_2015_AUTH_FUNC
     static CPSignal cpSignal = PWMNone;
 		CPSignal tmpCPSignal = checkCPSignal();
+
 		
-		//if(tmpCPSignal != PWMNone)
+		if(cpSignal != tmpCPSignal)
 		{
-			if(cpSignal != tmpCPSignal)
-			{
-				cpSignal = tmpCPSignal;
-				pc.printf("1: 12V  2: 9V 3: 6V 4: 0V 5: Other cpSignal=%d\r\n",cpSignal);
-			}
+			cpSignal = tmpCPSignal;
+			pc.printf("1: 12V  2: 9V 3: 6V 4: 0V 5: Other cpSignal=%d\r\n",cpSignal);
 		}
-		//pc.printf("cpSignal=%d ,checkTimes =%d\r\n",cpSignal,checkTimes);
-		//if((cpSignal == PWM12V)||(cpSignal == PWMNone)) {
+
 		if((cpSignal == PWM12V)||(cpSignal == PWM0V)||(cpSignal == PWMOtherVoltage)) {
 				connectStatus = NOT_CONNECTED;
 				chargerException.chargingEnableFlag = false;
@@ -684,13 +616,6 @@ void checkChargerConnectStatus(void)
 						connectStatus = CONNECTED_6V;
 				}
 				chargerException.chargingEnableFlag = true;
-				#ifdef AUTO_CHARGING // ericyang 20170111
-				if((chargerInfo.status == connected)&&(gChargingState == EV_IDLE)) {// ericyang 20170117
-						pc.printf("Auto pre start charging!\r\n");
-						chargerInfo.setDuration = 600;// 10 hours for test
-						preStartCharging();
-				}
-				#endif
 		}
 		#ifdef LED_INFO_ENABLE		
 		if(chargerException.chargingEnableFlag == true){
@@ -699,37 +624,7 @@ void checkChargerConnectStatus(void)
 				CONNECT_LED_OFF;
 		}
 		#endif		
-#else
-    if(blue == BLUE_ON) {  // CONNECT_LED_ON  ericyang 20161228
-        connectStatus = CONNECTED_6V;
-				//chargerInfo.status = idle;
-			  chargerException.chargingEnableFlag = true;
-				if(pwmState == false) {     // 16A current ericyang 20161230
-					 #ifdef CHARGING_CURRENT_32A
-						enableCPPWM(PWM_DUTY_CURRENT_32A);  // 32A current
-					  pc.printf("sw2 =  1, enable PWM! PWM duty:%f\r\n",PWM_DUTY_CURRENT_32A);
-					 #endif
-					 #ifdef CHARGING_CURRENT_16A
-					  enableCPPWM(PWM_DUTY_CURRENT_16A); //16A current
-					  pc.printf("sw2 =  1, enable PWM! PWM duty:%f\r\n",PWM_DUTY_CURRENT_16A);
-					 #endif
-        }  
-#ifdef AUTO_CHARGING // ericyang 20161208
-        if(chargerInfo.status == connected) {
-            pc.printf("sw2 button, start charging!\r\n");
-            chargerInfo.setDuration = 600;// 10 hours for test
-            startCharging();
-        }
-#endif
-    } else {
-        connectStatus = NOT_CONNECTED;
-				chargerException.chargingEnableFlag = false;
-				if(pwmState == true) { 
-					disableCPPWM();// ericyang 20161230
-					pc.printf("sw2 =  0, disable PWM!\r\n");
-				}
-    }
-#endif
+
     if(connectStatus != chargerInfo.connect) {
         chargerInfo.connect = connectStatus; // ericyang 20160919
 				pc.printf("chargerInfo.connect = %d\r\n",chargerInfo.connect);
@@ -741,8 +636,11 @@ void checkChargerConnectStatus(void)
 			  #endif
     }
 }
-/***********************************checkChargingStatus***************************/
-#ifdef GB18487_1_2015_AUTH_FUNC
+/*!
+	@birfe Check charging status
+	@input None
+	@output None
+*/
 void checkChargingStatus(void)
 {
 		switch(gChargingState){
@@ -764,40 +662,32 @@ void checkChargingStatus(void)
 					else{
 						if(chargerInfo.connect != CONNECTED_9V){
 								if(pauseChargingFlag == true){
-										stopCharging();   //gChargingState = EV_IDLE;
+										stopCharging();
 										pauseChargingFlag = false;
 								}
-								disableCPPWM();// ericyang 20161230  GB/T 18487.1-2015 A3.10.9
+								disableCPPWM();//GB/T 18487.1-2015 A3.10.9
 								pc.printf("error connect, disable charging!\r\n");
-//								#ifndef CHARGING_EXCEPTION_HANDLE_ENABLE
-//								eventHandle.stopChargingFlag = true;  // notify END charging msg to server;		20170113 important notify stop charging msg to server	
-//								#endif
 								gChargingState = EV_IDLE;
-						}else{ //orangecai 20170608
-								if(pauseChargingFlag == true && pauseChargingCounter > MAX_PAUSE_TIME){ //overtime of pause charging
+						}else{
+								if(pauseChargingFlag == true && pauseChargingCounter > MAX_PAUSE_TIME){ //timeout of pause charging
 										pauseChargingFlag = false;
-									  eventHandle.stopChargingFlag = true;   // notify end charging to server
-									  chargingEndType = END_IN_ADVANCE_FULL; //orangecai 20170719
+									  eventHandle.stopChargingFlag = true;
+									  chargingEndType = END_IN_ADVANCE_FULL;
 										pauseChargingCounter = 0;
-										stopCharging();   //gChargingState = EV_IDLE
-									  disableCPPWM();   // fix bug 20170926
-										#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-										initailizeChargerInfo();
+										stopCharging();
+									  disableCPPWM(); 
+										initChargerInfo();
                     chargerInfo.status = connected;									
-										#endif
+
 									  gChargingState = EV_IDLE;
 								}
 								if(startS2SwitchWaitCounterFlag == true && waitS2SwitchOnCounter > MAX_WAIT_TIME){
 										startS2SwitchWaitCounterFlag = false;
 										waitS2SwitchOnCounter = 0;
-//										eventHandle.stopChargingFlag = true;
-//										chargingEndType = END_WAIT_TIMEOUT;
-//										stopCharging();
 									  disableCPPWM();
-										#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-										initailizeChargerInfo();
+										initChargerInfo();
 										chargerInfo.status = connected;
-										#endif
+
 									  gChargingState = EV_IDLE;
 								}
 						}
@@ -809,19 +699,16 @@ void checkChargingStatus(void)
 						waitS2SwitchOnCounter = 0;
 					}
 					if(chargerInfo.connect != CONNECTED_6V){
-						#ifdef LED_INFO_ENABLE  // ericyang 2017.02.16
+						#ifdef LED_INFO_ENABLE
 							CHARGING_LED_OFF;
 						#endif	
 							if(chargerInfo.connect == CONNECTED_9V){  // S2 switch open  PWM still enable
 									gChargingState = EV_CONNECTED_PRE_START_CHARGING;
-									pauseCharging(true); // ericyang 20170113 add 
+									pauseCharging(true);
 							}
 							else{
 									stopCharging();	  //gChargingState = EV_IDLE;
 									disableCPPWM();
-								#ifndef CHARGING_EXCEPTION_HANDLE_ENABLE
-									eventHandle.stopChargingFlag = true;  // notify END charging msg to server;
-                #endif								
 									startS2SwitchOnOffCounterFlag = false;					
 							}
 					}
@@ -832,40 +719,26 @@ void checkChargingStatus(void)
 									return;
 							}	
 					}		
-				#ifdef LED_INFO_ENABLE  // ericyang 2017.02.16
+				#ifdef LED_INFO_ENABLE
 					CHARGING_LED_OFF;
 				#endif					
 					stopCharging();
-				#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-					initailizeChargerInfo();
+					initChargerInfo();
 					chargerInfo.status = connected;
 					eventHandle.stopChargingFlag = true;  //notify msg to server 
-				#endif
-			//		eventHandle.stopChargingFlag = true;  // notify END charging msg to server; 
-					//gChargingState = EV_IDLE;
+				
 					startS2SwitchOnOffCounterFlag = false;
 					break;
 			default:
 					break;	
 		}
 }
-#endif
-/***********************************check charging time***************************/
-void checkChargingTime(void)
-{
-		static int chargingTime = 0;
-    if(chargerInfo.status == charging) {   // ericyang 20170111 modify
-				if(chargingTime != chargerInfo.duration/60)
-				{
-					chargingTime = chargerInfo.duration/60;
-					pc.printf("Current Charging Time:%d min, Total:%d min \r\n",chargingTime,chargerInfo.setDuration);
-				}
-        if((chargerInfo.duration/60) >= chargerInfo.setDuration) {
-            chargerException.chargingTimeOverFlag = true;
-        }
-    }
-}
-/*****************************Check whether finish charging*************************/
+
+/*!
+	@birfe Check whether charging is finished
+	@input None
+	@output None
+*/
 void checkChargingFinish(void)
 {
 	static int chargingTime = 0;
@@ -895,7 +768,11 @@ void checkChargingFinish(void)
 	}
 }
 
-/*********************************get status of leds********************************/
+/*!
+	@birfe get current LED status
+	@input None
+	@output None
+*/
 char getledStatus(void)
 {
 	char status = 0;
@@ -909,7 +786,11 @@ char getledStatus(void)
     status |= 0x04;	
 	return status;
 }
-/***********************************check network connection***************************/
+/*!
+	@birfe Check current network condition
+	@input None
+	@output None
+*/
 void checkNetworkAvailable(void)
 {
     char heartbeatBuffer[64]; // send heartbeat package with json format,modified by orangeCai in 20170328 
@@ -925,9 +806,6 @@ void checkNetworkAvailable(void)
             if(tcpsocket.send(heartbeatBuffer,strlen(heartbeatBuffer)) <= 0) {
                 pc.printf("send heartbeat packet error!\r\n");
                 chargerException.serverConnectedFlag = false;
-#ifdef LCD_ENABLE
-                lcdshowonoffstate(false);
-#endif
             } else {
                 pc.printf("send heartbeat packet successful!\r\n");
 							  pc.printf("send %d bytes,%s\r\n",strlen(heartbeatBuffer),heartbeatBuffer);
@@ -939,52 +817,47 @@ void checkNetworkAvailable(void)
 #ifdef LCD_ENABLE
             lcdshowonoffstate(false);
 #endif				
-/*				
-        if(tcpsocket.is_connected() == false) { // fast check if server is ok
-            chargerException.serverConnectedFlag = false;
-					  pc.printf("never connect to server before!\r\n");
-        }
-*/				
+
     } else {
         tcpsocket.close();
         if(tcpsocket.connect(ECHO_SERVER_ADDRESS, ECHO_SERVER_PORT) < 0) {
-            //     printf("Unable to connect 2 to (%s) on port (%d)\r\n", ECHO_SERVER_ADDRESS, ECHO_SERVER_PORT);
+//     printf("Unable to connect 2 to (%s) on port (%d)\r\n", ECHO_SERVER_ADDRESS, ECHO_SERVER_PORT);
         } else {
 						pc.printf("connected to server!\r\n");
             chargerException.serverConnectedFlag = true;
 					  pc.printf("resetTimer = %d\r\n",resetTimer);
             if(eventHandle.firstConnectFlag != true)
 							resendFlag = true;
-#ifdef LCD_ENABLE
-            lcdshowonoffstate(true);
-#endif
         }
     }
 
     if(chargerException.serverConnectedFlag == false) {
         pc.printf("network unavailable!\r\n");
-				#ifdef LED_INFO_ENABLE  // ericyang 20170120
+			#ifdef LED_INFO_ENABLE 
 				SERVER_CONNECT_LED_OFF;
-				#endif
-    }
-		#ifdef LED_INFO_ENABLE   // ericyang 20170120
-		else {
+			#endif
+    }else {
+			#ifdef LED_INFO_ENABLE
 				SERVER_CONNECT_LED_ON;
+			#endif
 		}
-		#endif 
+		 
     
     if(resendFlag == true) {
         notifyMsgSendHandle(notifyNewDevice);
         resendFlag = false;
-        OTAInit();//ericyang 20160920
+        OTAInit();
     }
 }
 
-/********************************************recvMsgHandle()*****************************/
+/*!
+	@birfe Handle recieved massege
+	@input None
+	@output None
+*/
 void recvMsgHandle(void)
 {
     int len;
-    // int n = tcpsocket.receive_all(socketInfo.inBuffer, len);
     len = sizeof(socketInfo.inBuffer);
     memset(socketInfo.inBuffer,0x0,len);
     // int n = tcpsocket.receive(socketInfo.inBuffer, len);
@@ -1000,7 +873,11 @@ void recvMsgHandle(void)
 			  #endif
     }
 }
-/*******************************ENTER FACTORY MODE****************************************/
+/*!
+	@birfe Enter factory mode,used UDP Protocol to config server IP address
+	@input None
+	@output None
+*/
 void enterFactoryMode(void)   // LOCAL IP: 192.168.1.101:13348
 {
     UDPSocket udpsocket;
@@ -1050,17 +927,18 @@ void enterFactoryMode(void)   // LOCAL IP: 192.168.1.101:13348
     }
 }
 
-/******************************exception Handle thread***************************/
+/*!
+	@birfe Handle expection while charging
+	@input None
+	@output None
+*/
 void exceptionHandleThread(void const *argument)
 {
-//	uint32_t temp = us_ticker_read();
 	while(true){
-			checkChargerConnectStatus();
-			#ifdef GB18487_1_2015_AUTH_FUNC
-				checkChargingStatus();
-			#endif
+			checkChargerConnectStatus();			
+  		checkChargingStatus();
 			chargingExceptionHandle();		
-		
+
 		if(eventHandle.checkMeterFlag == false){
 			Thread::wait(20);
 		}else{
@@ -1069,20 +947,21 @@ void exceptionHandleThread(void const *argument)
 		}
 	}
 }
-/******************************network thread***************************/
+/*!
+	@birfe network thread,handle massage transceiver
+	@input None
+	@output None
+*/
 void netWorkThread(void const *argument)
 {
 	while(true){
 		        if(chargerException.serverConnectedFlag == false) {
-#ifndef NOT_CHECK_NETWORK
-            if(resetTimer > RESET_TIMER) { // 2 minutes
-                pc.printf("network error! system will be reset now, please wait...\r\n");
-                NVIC_SystemReset();
-            }
-#endif
-        } else {
+							if(resetTimer > RESET_TIMER) { // 2 minutes
+									pc.printf("network error! system will be reset now, please wait...\r\n");
+									NVIC_SystemReset();
+							}
+        }else {
             resetTimer = 0;
-
             if(notifySendID != invalidID) {
                 if((systemTimer-notifySendCounter) >= SOCKET_RESEND_TIME)
 								{
@@ -1104,7 +983,7 @@ void netWorkThread(void const *argument)
                     notifyMsgSendHandle(notifyChargerStatus);
                 }else if(eventHandle.updateChargerInfoFlag == true) {
                     eventHandle.updateChargerInfoFlag = false;
-										if(chargerInfo.status == charging) {  // ericyang 20170111
+										if(chargerInfo.status == charging) {
                         notifyMsgSendHandle(notifyChargingInfo);
                     }
                 }else if(eventHandle.getLatestFWFromServerFlag == true) {
@@ -1116,145 +995,55 @@ void netWorkThread(void const *argument)
 								}
             }
             recvMsgHandle();
-						/* detect whether to update code,orangeCai 20170602 */
+						/* detect whether to update code*/
 						if(updateCodeFlag == true && (chargerInfo.status & CHARGER_STATUS_MASK) != charging ){ //update code while not charging
 							updateCodeFlag = false;
 							pc.printf("\r\n\r\n chargerInfo.status = %d,start to update code!\r\n\r\n",chargerInfo.status);
-							tcpsocket.close(); //close socket,20170713
+							tcpsocket.close(); //close socket
 							updateCode(); // begin to update code
 						}
         }
 			Thread::wait(50);
 	}
 }
-/********************************************MAIN****************************************/
+/*!
+	@birfe main function
+	@input None
+	@output None
+*/
 int main(void)
 {
-#ifdef LED_INFO_ENABLE  // ericyang 20161228
+#ifdef LED_INFO_ENABLE
 	WARNING_LED_OFF;
 	CHARGING_LED_OFF;
 	CONNECT_LED_OFF;
-	SERVER_CONNECT_LED_OFF; // ericyang 20170215
+	SERVER_CONNECT_LED_OFF;
 #endif	
 
 #ifdef EEPROM_ENABLE
 		pinConfig();     //initialize i2c1 pins
 #endif	
-    pc.baud(115200); //initialize the PC interface
+    pc.baud(115200);
     RS485.baud(9600);
-    sw2.rise(&sw2_release);  // sw2 interrupt
 
-    switchRelayOnoff = RELAY_OFF;  // ericyang 20170111
-    pc.printf("\r\nAPP VER: %s\r\n",VERSION_INFO);//20161009
+    switchRelayOnoff = RELAY_OFF;
+    pc.printf("\r\nAPP VER: %s\r\n",VERSION_INFO);
 
-    if(factoryMode == 0) {// PTD7 LOW
+    if(factoryMode == 0) {
         enterFactoryMode();
     }
-
-//#ifdef EEPROM_ENABLE
-//#ifdef EEPROM_TEST
-//#if 0
-//		char dataTest[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-//		uint8_t addr = 0x92;
-//		pc.printf("addr:%x\r\n",addr);
-//		pc.printf("size of dataTest:%d\r\n",sizeof(dataTest));
-//		writeToEEPROM(addr,dataTest,sizeof(dataTest));
-//		readFromEEPROM(addr,tempBuffer,sizeof(dataTest));
-//		pc.printf("data:%s\r\n",tempBuffer);
-//#else
-//    uint8_t addr = 0x52;
-//		pc.printf("addr:%x\r\n",addr);		
-//		char meterNumber[9] = "12131415";
-//		ChargerInfo tmpChargerInfo;
-//		chargerInfo.connect = 1;
-//		chargerInfo.current = 14.5;
-//		chargerInfo.voltage = 233.3;
-//		chargerInfo.duration = 34;
-//		chargerInfo.energy = 13.5;
-//		chargerInfo.setDuration = 120;
-//		chargerInfo.power = 3133;
-//		chargerInfo.status = idle;
-//		memcpy(chargerInfo.meterNumber,meterNumber,sizeof(chargerInfo.meterNumber));
-//#if 1		
-//		writeToEEPROM(addr,(char*)(&chargerInfo),sizeof(chargerInfo));
-//		readFromEEPROM(addr,(char*)(&tmpChargerInfo),sizeof(tmpChargerInfo));	
-//		pc.printf("connet=%d\r\nstatus=%d\r\ncurrent=%f\r\nvoltage=%f\r\nenergy=%f\r\npower=%f\r\nmeterNumber=%s\r\n"
-//		,tmpChargerInfo.connect,tmpChargerInfo.status,tmpChargerInfo.current,tmpChargerInfo.voltage,
-//		tmpChargerInfo.energy,tmpChargerInfo.power,tmpChargerInfo.meterNumber);
-//#else
-//		uint16_t checksum,crc16;
-//		char* temp = (char*)malloc(sizeof(chargerInfo)+2);
-//		char* cdata;
-//		crc16 = calculate_crc16((char*)&chargerInfo,sizeof(chargerInfo));
-//		pc.printf("crc16=%x\r\n",crc16);
-//		temp[0] = crc16 >> 8;
-//		temp[1] = crc16 & 0xFF;
-//		memcpy(temp+2,(char*)&chargerInfo,sizeof(chargerInfo));
-//		writeToEEPROM(addr,temp,sizeof(chargerInfo)+2);
-//		readFromEEPROM(addr,cdata,sizeof(chargerInfo)+2);
-//		checksum = (cdata[0]<<8)|cdata[1];
-//		pc.printf("checksum=%x\r\n",checksum);
-//#endif
-
-//#endif
-//		while(1){}
-//#endif
-//#endif
 
 #ifdef WDOG_ENABLE
 		wDogInit(WDOG_TIMEOUT_VALUE_MS);
 #endif    
-#ifndef NOT_CHECK_NETWORK
-    initETH();  //initialize the Ethernet connection
-#endif
-#ifdef LCD_ENABLE
-    lcd.cls();
-#endif
 
-    disableCPPWM();  // ericyang 20160920 init pwm freq:0  duty:1;
+    initETH();
+    disableCPPWM();
     initServer();
-    initCharger();  //ericyang 20160801
-    initEventHandle(); // ericyang 20160920
-#ifndef NOT_CHECK_NETWORK // ericyang 20160927    
-    OTAInit();  // 20160912 for OTA FUNC
-#endif
+    initCharger();
+    initEventHandle();
+    OTAInit();
 		us_ticker_init();
-//#ifdef RTC_ENABLE
-//rtcInit(RTC_INIT_TIME);
-//#ifdef RTC_TEST
-//		struct tm initTime;
-//		initTime.tm_year = 117;
-//		initTime.tm_mon = 5;
-//		initTime.tm_mday = 20;
-//		initTime.tm_hour = 0;
-//		initTime.tm_min = 0;
-//		initTime.tm_sec = 0; 
-//		set_time(mktime(&initTime));
-//		us_ticker_init();  
-//		pc.printf("rtc enable!\r\n");
-//#endif
-//#endif
-#ifndef GB18487_1_2015_AUTH_FUNC
-		if(chargerInfo.connect == CONNECTED_6V)
-		{
-			blue = BLUE_ON;  // ericyang 20161228 1->0
-			chargerException.chargingEnableFlag == true;
-			#ifdef CHARGING_CURRENT_32A
-			enableCPPWM(PWM_DUTY_CURRENT_32A);  // 32A current
-			pc.printf("sw2 =  1, enable PWM! PWM duty:%f\r\n",PWM_DUTY_CURRENT_32A);
-			#endif
-			#ifdef CHARGING_CURRENT_16A
-			enableCPPWM(PWM_DUTY_CURRENT_16A);
-			pc.printf("sw2 =  1, enable PWM! PWM duty:%f\r\n",PWM_DUTY_CURRENT_16A);
-			#endif
-		}
-		else{
-			blue = BLUE_OFF;  // ericyang 20161228 0->1
-			chargerException.chargingEnableFlag == false;
-			disableCPPWM();// ericyang 20161230
-			pc.printf("sw2 =  0, disable PWM!\r\n");
-		}
-#endif		
 
 		tcpsocket.set_blocking(false,40);// depends on network delay 
 		
@@ -1268,9 +1057,7 @@ int main(void)
 			  wDogFeed();   //feed dog
 #endif
 		
-#ifndef NOT_CHECK_NETWORK
-        checkNetworkAvailable();
-#endif
+			checkNetworkAvailable();
 			if(checkChargingFinishFlag == true){
 				checkChargingFinish();
 				checkChargingFinishFlag = false;
@@ -1279,14 +1066,10 @@ int main(void)
 				if(chargerInfo.status == charging && fullChargingFlag == true){
 					fullChargingFlag = false;
 					stopCharging();
-				  #ifdef GB18487_1_2015_AUTH_FUNC 
-	         disableCPPWM();
-				  #endif
+	        disableCPPWM();
 					chargerInfo.status = connected;
-					#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-					initailizeChargerInfo();
-					#endif
-					eventHandle.stopChargingFlag = true; // notify END charging msg when reconnect to server
+					initChargerInfo();
+					eventHandle.stopChargingFlag = true; // notify Endcharging msg when reconnect to server
 					chargingEndType = END_IN_ADVANCE_FULL;
 					pc.printf("full of energy,stop charging!\r\n");
 				}

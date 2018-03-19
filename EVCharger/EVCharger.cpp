@@ -1,31 +1,55 @@
-/*
-* Note:last modification by orange cai in 20170720
-*/
+/**
+	---------------------------------------------------------------------------
+	* Describtion:            Firmware for AC EV Charger
+	* Company:                WPI-ATU
+	* Author:                 Orange
+	* Version:                V2.0
+	* Date:                   2018-03-16
+	* Function List:
+			1. RS485 Communication
+			2. Ethernet Communication,RJ45 interface
+	    3. Wechat control
+			4. Follow the GB/T 18487.1-2015 Standard
+			5. Use Mbed OS 2.0
+	* History:
+	---------------------------------------------------------------------------
+**/
 
+/*----------------------------------------------------------------------------
+ * Includes
+-----------------------------------------------------------------------------*/
 #include "EVCharger.h"
 #include "cJSON.h"
 #include "otaCharger.h"
 #include "lib_crc16.h"
 #include "UserConfig.h"
-
-MSGType msgType = invalidType ;  //
+/*----------------------------------------------------------------------------
+ * Global Variable
+-----------------------------------------------------------------------------*/
+MSGType msgType = invalidType ; 
 MSGID msgID = invalidID;
-MSGID notifySendID = invalidID;  // send notify to server flag
+MSGID notifySendID = invalidID;
 int notifySendCounter = 0;
 char msgIdstr[10];
 volatile int respcode ;
 char jsonBuffer[256];
 ChargerInfo chargerInfo;
-//MeterInfo meterInfo;
 ChargerException chargerException;
 OTAInfo otaInfo;
 float curChargingEnergy = 0;
 int curChargingDuration = 0;
-int setChargingDuration = 0;    //orangecai 20170608
-float setChargingEnergy = 0;   //orangecai 20170719
-int curChargingType = CHARGING_TYPE_NONE;//orangecai 20170719
+int setChargingDuration = 0;
+float setChargingEnergy = 0;
+int curChargingType = CHARGING_TYPE_NONE;
 int chargingEndType = END_NONE;
-
+/*----------------------------------------------------------------------------
+ * Function Definition
+-----------------------------------------------------------------------------*/
+/*!
+	@birfe Get endType of charging
+	@input charger Status
+	@output endType
+*/
 int getChargingEndType(int chargerStatus)
 {
 	int type;
@@ -45,182 +69,135 @@ int getChargingEndType(int chargerStatus)
 		type = END_NONE;
 	return type;
 }
+/*!
+	@birfe init chargerException structure
+	@input None
+	@output None
+*/
 void initCharger(void)
 {
-    #ifdef NOT_CHECK_NETWORK  // ericyang 20161208
-    chargerException.serverConnectedFlag = true;
-    #else
     chargerException.serverConnectedFlag = false;
-    #endif
-    chargerException.meterCrashedFlag = true;  // ericyang 20161216 false -> true as default
+    chargerException.meterCrashedFlag = true;  //false -> true as default
     chargerException.chargingVoltageErrorFlag = false;
     chargerException.chargingCurrentErrorFlag = false;
     chargerException.chargingTimeOverFlag = false;
     chargerException.chargingEnableFlag = false;
-    
+	
 	  #if defined(EEPROM_ENABLE)
-    loadChargerInfoFromEEPROM();
+			loadChargerInfoFromEEPROM();
 	  #else
-	  loadChargerInfoFromFlash();
+			loadChargerInfoFromFlash();
 	  #endif
 }
-
-#ifdef GB18487_1_2015_AUTH_FUNC
-int preStartCharging(void)
+/*!
+	@birfe Enter preStart stage,Enable PWM
+	@input None
+	@output None
+*/
+void preStartCharging(void)
 {
-	  chargingEndType = END_NONE;  //orangecai 20170719
+	  chargingEndType = END_NONE;
 		gChargingState = EV_CONNECTED_PRE_START_CHARGING;
-		//if(pwmState == false) {     // 16A current ericyang 20161230
 	  #ifdef CHARGING_CURRENT_32A
-		enableCPPWM(PWM_DUTY_CURRENT_32A);  // 32A current
+		enableCPPWM(PWM_DUTY_CURRENT_32A);
 	  pc.printf("enable PWM,PWM duty:%f wait for S2 CLOSED\r\n",PWM_DUTY_CURRENT_32A);
-    //}
+
 	  #endif
     #ifdef CHARGING_CURRENT_16A
     enableCPPWM(PWM_DUTY_CURRENT_16A);
     pc.printf("enable PWM,PWM duty:%f wait for S2 CLOSED\r\n",PWM_DUTY_CURRENT_16A);
 	  #endif
-		return 0;
 }
-
-int preStopCharging(void)
+/*!
+	@birfe Enter preStop stage,Disabel PWM
+	@input None
+	@output None
+*/
+void preStopCharging(void)
 {
 		gChargingState = EV_CONNECTED_PRE_STOP_CHARGING;
-		//if(pwmState == true) { 
-		disableCPPWM();// ericyang 20161230
+		disableCPPWM();
 		pc.printf("pre stop charging, disable PWM!\r\n");
-		//}	
 		startS2SwitchOnOffCounterFlag = true;
-		S2SwitchOnOffCounter = 0;	
-		return 0;
+		S2SwitchOnOffCounter = 0;
 }
-
-int pauseCharging(bool onoff)
+/*!
+	@birfe Pause charging,Relay off
+	@input 1->enable pause charging,0->disable pause charging
+	@output None
+*/
+void pauseCharging(bool onoff)
 {
 		if(onoff == true){
-				pauseChargingFlag = true;
-				switchRelayOnoff = RELAY_OFF;  // ericyang 20170111
-		}
-		else{
-				pauseChargingFlag = false;
-				switchRelayOnoff = RELAY_ON;  // ericyang 20170111	
+			pauseChargingFlag = true;
+			switchRelayOnoff = RELAY_OFF;  // ericyang 20170111
+		}else{
+			pauseChargingFlag = false;
+			switchRelayOnoff = RELAY_ON;  // ericyang 20170111	
 		}
 }
 
-#endif
-#ifdef GB18487_1_2015_AUTH_FUNC
-int startCharging(void)
+/*!
+	@birfe Enter charging stage,init parameters and relay on
+	@input None
+	@output None
+*/
+void startCharging(void)
 {
-	#ifndef CHARGING_EXCEPTION_HANDLE_ENABLE
-		startEnergyReadFromMeter = totalEnergyReadFromMeter;
-		chargerInfo.energy = 0; //ericyang 20161216 add
-		chargerInfo.duration = 0; // ericyang 20161216 add
-	#endif
-	
-	#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-	  if(startContinueChargingFlag == false){
+	 if(startContinueChargingFlag == false){ //init relative parameters
 			startEnergyReadFromMeter = totalEnergyReadFromMeter;
 			chargerInfo.energy = 0; 
 			chargerInfo.duration = 0;
 		}else{
 			startContinueChargingFlag = false;  //continue charging
 		}
-	#endif
-		//getChargerInfo(); // =0
-		chargerInfo.status = charging; //ok, start charging
+		chargerInfo.status = charging;
 		eventHandle.checkMeterFlag = false;
-		switchRelayOnoff = RELAY_ON;  // ericyang 20170111
-//	#ifdef LED_INFO_ENABLE
-//		CHARGING_LED_ON;
-//	#endif
+		switchRelayOnoff = RELAY_ON;
 }
-#else
-int startCharging(void)
+/*!
+	@birfe Stop charging,init relative parameters and relay off
+	@input None
+	@output None
+*/
+void stopCharging(void)
 {
-    if(chargerInfo.connect == CONNECTED_6V) {
-        if(chargerException.meterCrashedFlag == false) { // check meter ok
-            if(chargerInfo.status == connected) {
-                //if(getMeterInfo() < 0)
-                //    return -1;  // meter error
-                //else {
-                //   chargerException.chargingTimeOverFlag = false;// ericyang 20160919
-                startEnergyReadFromMeter = totalEnergyReadFromMeter;
-								chargerInfo.energy = 0; //ericyang 20161216 add
-								chargerInfo.duration = 0; // ericyang 20161216 add
-                //getChargerInfo(); // =0
-                chargerInfo.status = charging; //ok, start charging
-                eventHandle.checkMeterFlag = false;
-                switchRelayOnoff = RELAY_ON;  // ericyang 20170111
-							#ifdef LED_INFO_ENABLE
-								CHARGING_LED_ON;
-							#endif
-                //    checkMeterFlag = true;
-                //}
-            } else {
-                return -2;  //charger is busy or something else;
-            }
-        } else {
-            return -1;// meter error!
-        }
-    } else {
-        return -3; // connect error!
-    }
-
-    pc.printf("start charging!\r\n");
-    return 0;
-}
-#endif
-int stopCharging(void)
-{
-	#ifdef GB18487_1_2015_AUTH_FUNC
-		gChargingState = EV_IDLE; // ericyang 20170117 add
-	#endif
-	
-	#ifndef CHARGING_EXCEPTION_HANDLE_ENABLE
-    chargerInfo.status = connected;
-		curChargingDuration = chargerInfo.duration;
-		curChargingEnergy = chargerInfo.energy;
-	  curChargingType = chargerInfo.chargingType; //orangecai 20170719
-	  setChargingDuration = chargerInfo.setDuration; // orangecai 20170608
-	  setChargingEnergy = chargerInfo.setEnergy;   //orangecai 20170719
-	  chargerInfo.setDuration = 0; // orangecai 20170608
-    chargerInfo.setEnergy = 0;  //orangecai 20170719
-    chargerInfo.duration = 0;  // for test only
-		chargerInfo.energy = totalEnergyReadFromMeter;
-	  chargerInfo.chargingType = CHARGING_TYPE_NONE;//orangecai 20170719
-		startEnergyReadFromMeter = 0; //ericyang 20161215 fix energy bug
-	#endif
-    
-	  switchRelayOnoff = RELAY_OFF; // ericyang 20170111
+	gChargingState = EV_IDLE;
+	switchRelayOnoff = RELAY_OFF;
 	#ifdef LED_INFO_ENABLE
-			CHARGING_LED_OFF;
+		CHARGING_LED_OFF;
 	#endif
-    pc.printf("stop charging!\r\n");
-    return 0;
+  pc.printf("stop charging!\r\n");
 }
 
-#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-void initailizeChargerInfo(void)
+/*!
+	@birfe Init chargerInfo
+	@input None
+	@output None
+*/
+void initChargerInfo(void)
 {
-	//chargerInfo.status = idle;
 	curChargingDuration = chargerInfo.duration;
 	curChargingEnergy = chargerInfo.energy;
-	curChargingType = chargerInfo.chargingType;  //orangecai 20170719
-	setChargingDuration = chargerInfo.setDuration;  //orangecai 20170608
-  setChargingEnergy = chargerInfo.setEnergy; //orangecai 20170719
-	chargerInfo.setDuration = 0; //orangecai 20170608
+	curChargingType = chargerInfo.chargingType;
+	setChargingDuration = chargerInfo.setDuration;
+  setChargingEnergy = chargerInfo.setEnergy;
+	chargerInfo.setDuration = 0;
 	chargerInfo.duration = 0;
 	chargerInfo.energy = totalEnergyReadFromMeter;
 	startEnergyReadFromMeter = 0;
-	chargerInfo.setEnergy = 0; //orangecai 20170719
-	chargerInfo.chargingType = CHARGING_TYPE_NONE; //orangecai 20170719
+	chargerInfo.setEnergy = 0;
+	chargerInfo.chargingType = CHARGING_TYPE_NONE;
 }
-#endif
-/* Parse text to JSON, then render back to text, and print! */
+
+/*!
+	@birfe Parse text to JSON 
+	@input pointer to string
+	@output None
+*/
 void parseRecvMsgInfo(char *text)
 {
     cJSON *json;
-    //  int respcode;
     json=cJSON_Parse(text);
     if (!json) {
         pc.printf("not json string, start to parse another way!\r\n");
@@ -246,11 +223,10 @@ void parseRecvMsgInfo(char *text)
 							  if(cJSON_HasObjectItem(data,"type")==1 && cJSON_HasObjectItem(data,"time")==1 
 									&& cJSON_HasObjectItem(data,"energy")==1 && cJSON_HasObjectItem(data,"userId")==1){
 										sprintf(msgIdstr,cJSON_GetObjectItem(data,"msgId")->valuestring);
-										chargerInfo.chargingType = cJSON_GetObjectItem(data,"type")->valueint;
-										chargerInfo.userId = cJSON_GetObjectItem(data,"userId")->valueint;
-//										respcode = RESP_ERROR;
 										pc.printf("recv msg %s = %d, msgid = %s\r\n",SETChargingStart, chargerInfo.setDuration,msgIdstr);
                     if(chargerInfo.status == connected){
+											chargerInfo.chargingType = cJSON_GetObjectItem(data,"type")->valueint;
+											chargerInfo.userId = cJSON_GetObjectItem(data,"userId")->valueint;
 											if(chargerInfo.chargingType == CHARGING_TYPE_MONEY || chargerInfo.chargingType == CHARGING_TYPE_TIME){
 												chargerInfo.setEnergy = cJSON_GetObjectItem(data,"energy")->valuedouble;
 												chargerInfo.setDuration = cJSON_GetObjectItem(data,"time")->valueint;
@@ -258,11 +234,7 @@ void parseRecvMsgInfo(char *text)
 													  (chargerInfo.chargingType == CHARGING_TYPE_TIME && chargerInfo.setDuration >0)){
 												    pc.printf("charging type:%d!\tsetEnergy=%f\tsetDuration=%d\r\n"
 															,chargerInfo.chargingType,chargerInfo.setEnergy,chargerInfo.setDuration);
-													#ifdef GB18487_1_2015_AUTH_FUNC
 														preStartCharging();
-													#else
-														startCharging();
-													#endif
 													respcode = RESP_OK;
 													startS2SwitchWaitCounterFlag = true;
 													waitS2SwitchOnCounter = 0;
@@ -277,9 +249,15 @@ void parseRecvMsgInfo(char *text)
 												pc.printf("charging type error!\r\n");
 												cmdMsgRespHandle(msgID);   //Parameter error, respond immediately
 											}
+									}else{
+										respcode = RESP_ILLEGAL;
+										pc.printf("illegal request!\r\n");
+										cmdMsgRespHandle(msgID);
 									}
 								}else{
+									respcode = RESP_ITEM_ERROR;
 									pc.printf("json item error!\r\n");
+									cmdMsgRespHandle(msgID);
 								}
             } else  if(strcmp(jsonBuffer,SETChargingEnd) == NULL) {
                 msgID = setChargingEnd;
@@ -287,28 +265,24 @@ void parseRecvMsgInfo(char *text)
                 pc.printf("recv msg %s , msgid = %s\r\n",SETChargingEnd,msgIdstr);
 							if((chargerInfo.status & CHARGER_STATUS_MASK)==charging){
                 respcode = RESP_OK;
-							#ifdef GB18487_1_2015_AUTH_FUNC
-								preStopCharging(); // ericyang 20170111
-							#else
-							  stopCharging();// ericyang 20161216 move before cmdMsgRespHandle
-							#endif
-							  chargingEndType = END_IN_ADVANCE;  //20170719
+								preStopCharging();
+							  chargingEndType = END_IN_ADVANCE;
 							}else{
 								respcode = RESP_ILLEGAL;
 								pc.printf("not charging!Cannot be stopped!\r\n");
 							}
 							cmdMsgRespHandle(msgID);
             }
-						else  if(strcmp(jsonBuffer,SETUpdateVersion) == NULL){ //add by orangeCai , 20170328
+						else  if(strcmp(jsonBuffer,SETUpdateVersion) == NULL){
 							msgID = setUpdateVersion;						
 							sprintf(msgIdstr,cJSON_GetObjectItem(data,"msgId")->valuestring);
 							sprintf(otaInfo.latestVersionFromServer,cJSON_GetObjectItem(data,"versionNumber")->valuestring);
-							sprintf(otaInfo.latestVersionSNFromServer,cJSON_GetObjectItem(data,"versionSN")->valuestring); //orangecai 20170410
-							pc.printf("latest versionSN from server:%s\r\n",otaInfo.latestVersionSNFromServer); //orangecai 20170410
+							sprintf(otaInfo.latestVersionSNFromServer,cJSON_GetObjectItem(data,"versionSN")->valuestring);
+							pc.printf("latest versionSN from server:%s\r\n",otaInfo.latestVersionSNFromServer);
 							otaInfo.FWSizeFromServer = cJSON_GetObjectItem(data,"versionSize")->valueint;
               otaInfo.FWCheckSumFromServer = cJSON_GetObjectItem(data,"checkSum")->valueint;
-							otaInfo.oldVersionId = cJSON_GetObjectItem(data,"oldVersionId")->valueint;   //orangecai 20170414
-					    otaInfo.newVersionId = cJSON_GetObjectItem(data,"newVersionId")->valueint;   //orangecai 20170414
+							otaInfo.oldVersionId = cJSON_GetObjectItem(data,"oldVersionId")->valueint;
+					    otaInfo.newVersionId = cJSON_GetObjectItem(data,"newVersionId")->valueint;
 							respcode = RESP_OK;
 							
 							pc.printf("recv msg %s , msgid = %s\r\n",SETUpdateVersion,msgIdstr);
@@ -329,9 +303,8 @@ void parseRecvMsgInfo(char *text)
                     if(strcmp(VERSION_INFO,otaInfo.latestVersionFromServer)) { // fw version is not the same, update flash ota code;
                         eventHandle.getLatestFWFromServerFlag = true; //  get fw code from server;
                         otaInfo.currentFWSector = 0;
-                        pc.printf("has new FW version On Server,start to update!\r\n"); // orangecai 20170407
+                        pc.printf("has new FW version On Server,start to update!\r\n");
                     } else {
-											//  eventHandle.updateVersionDoneFlag = true;   //orangeCai 20170329
                         pc.printf("the fw version is the newest!\r\n");
                     }
                 }
@@ -385,56 +358,25 @@ void parseRecvMsgInfo(char *text)
             respcode = cJSON_GetObjectItem(data,"respCode")->valueint;
             if(strcmp(jsonBuffer,NOTIFYNewDevice) == NULL) {
                 msgID = notifyNewDevice;
-                //if(cJSON_GetObjectItem(data,"meterNumber") != NULL) {
                 if(cJSON_HasObjectItem(data,"meterNumber") == 1) {
                     sprintf(chargerInfo.meterNumber,cJSON_GetObjectItem(data,"meterNumber")->valuestring);
-                    //sprintf(chargerInfo.meterNumber,"15500544");//for test
                     pc.printf("recv msg %s , meterNumber = %s\r\n",NOTIFYNewDevice, chargerInfo.meterNumber);
 									  #if defined(EEPROM_ENABLE)
-                    saveChargerInfoToEEPROM();
+											saveChargerInfoToEEPROM();
 								    #else
-									  saveChargerInfoToFlash();
+											saveChargerInfoToFlash();
                     #endif									
 									
                 } else {
                     #ifdef DISABLE_NETWORK_CONMUNICATION_FUNC
-                    eventHandle.stopCommunicationFlag = true;
+											eventHandle.stopCommunicationFlag = true;
                     #endif
                     pc.printf("NotifyNewDevice has no meterNumber param, stop Conmunication!\r\n");
                 }
-            }/* else  if(strcmp(jsonBuffer,NOTIFYCheckVersion) == NULL) {
-                msgID = notifyCheckVersion;
-                sprintf(otaInfo.latestVersionFromServer,cJSON_GetObjectItem(data,"latestVersion")->valuestring);
-                otaInfo.FWSizeFromServer = cJSON_GetObjectItem(data,"versionSize")->valueint;
-                otaInfo.FWCheckSumFromServer = cJSON_GetObjectItem(data,"checkSum")->valueint;
-                pc.printf("recv msg %s , latestVersion = %s size = %d, checksum= %x\r\n",NOTIFYCheckVersion, otaInfo.latestVersionFromServer,otaInfo.FWSizeFromServer,otaInfo.FWCheckSumFromServer);
-
-                if(otaInfo.FWSizeFromServer % SECTOR_SIZE == 0) {
-                    otaInfo.FWSectorNum = otaInfo.FWSizeFromServer / SECTOR_SIZE;
-                    otaInfo.lastSectorSize = SECTOR_SIZE;
-                } else {
-                    otaInfo.FWSectorNum = otaInfo.FWSizeFromServer / SECTOR_SIZE + 1;
-                    otaInfo.lastSectorSize = otaInfo.FWSizeFromServer % SECTOR_SIZE;
-                }
-
-                if((otaInfo.FWSectorNum > CODE_SECTOR_NUM) || (otaInfo.FWSectorNum < MIN_CODE_SECTOR_NUM)) {
-                    pc.printf("fw size %d is too larger or too small, please check...\r\n",otaInfo.FWSizeFromServer);
-                } else {
-                    if(strcmp(VERSION_INFO,otaInfo.latestVersionFromServer)) { // fw version is not the same, update flash ota code;
-                        eventHandle.getLatestFWFromServerFlag = true; //  get fw code from server;
-                        otaInfo.currentFWSector = 0;
-                        pc.printf("has new FW version On Server\r\n");
-                    } else {
-                        pc.printf("the fw version is the newest!\r\n");
-                    }
-                }
-                //eventHandle.getLatestFWFromServerFlag = true; //  for test!!!!!!!
-            } */else  if(strcmp(jsonBuffer,NOTIFYUpdateVersion) == NULL) {
+            }else  if(strcmp(jsonBuffer,NOTIFYUpdateVersion) == NULL) {
                 msgID = notifyUpdateVersion;
             } else  if(strcmp(jsonBuffer,NOTIFYChargerStatus) == NULL) {
                 msgID = notifyChargerStatus;
- //           } else  if(strcmp(jsonBuffer,NOTIFYConnectStatus) == NULL) {
- //               msgID = notifyConnectStatus;
             } else  if(strcmp(jsonBuffer,NOTIFYChargingInfo) == NULL) {
                 msgID = notifyChargingInfo;
             } else  if(strcmp(jsonBuffer,NOTIFYEndCharging) == NULL) {
@@ -448,20 +390,25 @@ void parseRecvMsgInfo(char *text)
                 pc.printf("send msg %s successful!\r\n",jsonBuffer);
 							  if(notifySendID == notifyOTAResult && otaSuccessFlag == true){
 									updateCodeFlag = true;  //start to update code when charger is not charging
-									otaSuccessFlag = false;  //orangecai 20170720
+									otaSuccessFlag = false;
 								}
                 notifySendID = invalidID;
             } else {
-                //  notifyMsgSendHandle(notifySendID);  //if notify not get right resp, resend notify
             }
         } else {
         }
         cJSON_Delete(json);
     }
 }
+
 /*
-        HEADER     BLOCK OFFSET       BLOCK SIZE  CHECKSUM    Bin data
-       "OTABIN" 0x00 0x00 0x00 0x00    0x10 0x00  0xFF 0xFF
+   HEADER----------BLOCK OFFSET-------BLOCK SIZE-------CHECKSUM-------Bin data
+  "OTABIN"----0x00 0x00 0x00 0x00------0x10 0x00-------0xFF 0xFF------
+*/
+/*!
+	@birfe Parse binary data
+	@input pointer to string
+	@output None
 */
 #define BLOCKOFFSET_POS 6
 #define BLOCKSIZE_POS 10
@@ -470,20 +417,14 @@ void parseRecvMsgInfo(char *text)
 void parseBincodeBuffer(char *text)
 {
     char* buf;
-    //int i = 0;
-
     int blockOffset = 0;
     int blockSize = 0;
     int checksum = 0;
 
     int crc16;
-	  int reWrite = 0;  //orangecai
-    //int lastSectorSize;
+	  int reWrite = 0;
     int currentSectorSize;
-    //int fwSectorNum;
 
-    //for(i=0; i<20; i++)
-    //    pc.printf("[%d]=%X \r\n",i,text[i]);
     if(strncmp(text, SOCKET_OTA_HEADER, strlen(SOCKET_OTA_HEADER))== NULL) {
         blockOffset = ((text[BLOCKOFFSET_POS] << 24) | (text[BLOCKOFFSET_POS+1] << 16) |(text[BLOCKOFFSET_POS+2] << 8)|text[BLOCKOFFSET_POS+3]);
         blockSize = ((text[BLOCKSIZE_POS] << 8) | text[BLOCKSIZE_POS+1]);
@@ -515,9 +456,6 @@ void parseBincodeBuffer(char *text)
 											
                 erase_sector(OTA_CODE_START_ADDRESS+otaInfo.currentFWSector*SECTOR_SIZE);
 								iapCode = program_flash(OTA_CODE_START_ADDRESS+otaInfo.currentFWSector*SECTOR_SIZE,buf, blockSize);
-//								if(iapCode != Success){
-//									pc.printf("write to section %d fail!,iapCode:%d\r\n",otaInfo.currentFWSector,iapCode);
-//								}
 								crc16 = calculate_crc16((char*)(OTA_CODE_START_ADDRESS+otaInfo.currentFWSector*SECTOR_SIZE),blockSize);
 								
 								while(crc16 != checksum && reWrite < 10){   //try to rewrite data when verify failed
@@ -536,7 +474,7 @@ void parseBincodeBuffer(char *text)
 								}else{
 									pc.printf("write section:%d failed!\r\n",otaInfo.currentFWSector);
 									eventHandle.getLatestFWFromServerFlag = false;   //stop update!
-									eventHandle.updataVersionFailFlag = true; //orangecai 20170720
+									eventHandle.updataVersionFailFlag = true;
 									OTAInit();     //recover ota partition!
 								}
             }
@@ -544,14 +482,15 @@ void parseBincodeBuffer(char *text)
         }
     }
 }
-
+/*!
+	@birfe Send massage handler
+	@input msgID
+	@output None
+*/
 void notifyMsgSendHandle(MSGID msgid)
 {
-		#ifndef NOT_CHECK_NETWORK
     int i,len= 0;
     int crc16;
-//    if(notifySendID != invalidID) // can't send msg before prev msg send ok(receive resp msg)
-//        return;
     #ifdef DISABLE_NETWORK_CONMUNICATION_FUNC
     if(eventHandle.stopCommunicationFlag == true)
         return;
@@ -562,27 +501,23 @@ void notifyMsgSendHandle(MSGID msgid)
     memset(socketInfo.outBuffer,0,sizeof(socketInfo.outBuffer));
 
     if(msgid == notifyNewDevice) {
-        if(strcmp(chargerInfo.meterNumber, NULL) == NULL) {  //20160918 ericyang
+        if(strcmp(chargerInfo.meterNumber, NULL) == NULL) {  
             sprintf(socketInfo.outBuffer,NOTIFY_REQ_NewDevice,EVChargerModelNO,false);
         } else {
             sprintf(socketInfo.outBuffer,NOTIFY_REQ_NewDevice,EVChargerModelNO,true);
         }
     }
-		/*
-		  else if(msgid == notifyCheckVersion) {
-        sprintf(socketInfo.outBuffer,NOTIFY_REQ_CheckVersion);
-    }*/
 		else if(msgid == notifyUpdateVersion) {
 
         pc.printf("fwSectorNum=%d,otaInfo.currentFWSector=%d\r\n",otaInfo.FWSectorNum,otaInfo.currentFWSector);
         if(otaInfo.currentFWSector < otaInfo.FWSectorNum) {
             if(otaInfo.currentFWSector + 1 == otaInfo.FWSectorNum) {
-              sprintf(socketInfo.outBuffer,NOTIFY_REQ_UpdateVersion,otaInfo.latestVersionSNFromServer,otaInfo.currentFWSector * SECTOR_SIZE,otaInfo.lastSectorSize); //orangecai 20170410
+              sprintf(socketInfo.outBuffer,NOTIFY_REQ_UpdateVersion,otaInfo.latestVersionSNFromServer,otaInfo.currentFWSector * SECTOR_SIZE,otaInfo.lastSectorSize);
 							pc.printf("otaInfo.lastFWSectorSize=%d\r\n",otaInfo.lastSectorSize);
 							pc.printf("otaInfo.latestVersionSNFromServer:%s!\r\n",otaInfo.latestVersionSNFromServer);
                 //eventHandle.getLatestFWFromServerFlag = false;  // be careful!
             } else {
-              sprintf(socketInfo.outBuffer,NOTIFY_REQ_UpdateVersion,otaInfo.latestVersionSNFromServer,otaInfo.currentFWSector * SECTOR_SIZE,SECTOR_SIZE); //orangecai 20170410
+              sprintf(socketInfo.outBuffer,NOTIFY_REQ_UpdateVersion,otaInfo.latestVersionSNFromServer,otaInfo.currentFWSector * SECTOR_SIZE,SECTOR_SIZE); 
 							pc.printf("otaInfo.currentFWSectorSize=%d\r\n",SECTOR_SIZE);
 							pc.printf("otaInfo.latestVersionSNFromServer:%s!\r\n",otaInfo.latestVersionSNFromServer);
             }
@@ -610,8 +545,8 @@ void notifyMsgSendHandle(MSGID msgid)
                 sprintf(tempBuffer+4,"%s",otaInfo.latestVersionFromServer);
                 erase_sector(VERSION_STR_ADDRESS);
                 program_flash(VERSION_STR_ADDRESS,tempBuffer, SECTOR_SIZE);
-                eventHandle.updateVersionDoneFlag = true;  // add by orangeCai 20170328
-                otaSuccessFlag = true;  //orangecai 20170720								
+                eventHandle.updateVersionDoneFlag = true;
+                otaSuccessFlag = true;								
 							}else{
 								pc.printf("This version is only for testing flash!no update!\r\n");
 							}
@@ -622,15 +557,12 @@ void notifyMsgSendHandle(MSGID msgid)
         }
     } else if(msgid == notifyChargerStatus) {
         sprintf(socketInfo.outBuffer,NOTIFY_REQ_ChargerStatus,chargerInfo.status,chargerInfo.connect);
-//    } else if(msgid == notifyConnectStatus) {
-//        sprintf(socketInfo.outBuffer,NOTIFY_REQ_ConnectStatus,chargerInfo.connect);
     } else if(msgid == notifyChargingInfo) {
         sprintf(socketInfo.outBuffer,NOTIFY_REQ_ChargingInfo,chargerInfo.chargingType,chargerInfo.energy,chargerInfo.voltage,
 			  chargerInfo.current,chargerInfo.power,chargerInfo.duration/60,chargerInfo.status,chargerInfo.connect,chargerInfo.setDuration,chargerInfo.setEnergy);
     } else if(msgid == notifyEndCharging) {
-        //sprintf(socketInfo.outBuffer,NOTIFY_REQ_EndCharging,chargerInfo.energy,chargerInfo.duration/60,chargerInfo.status,chargerInfo.connect);
-			  sprintf(socketInfo.outBuffer,NOTIFY_REQ_EndCharging,chargerInfo.userId,curChargingEnergy,curChargingDuration/60,chargerInfo.status,chargerInfo.connect,setChargingDuration,setChargingEnergy,chargingEndType);// orangecai 20170608
-    } else if(msgid == notifyOTAResult){  //modify 20170720
+			  sprintf(socketInfo.outBuffer,NOTIFY_REQ_EndCharging,chargerInfo.userId,curChargingEnergy,curChargingDuration/60,chargerInfo.status,chargerInfo.connect,setChargingDuration,setChargingEnergy,chargingEndType);
+    } else if(msgid == notifyOTAResult){
 				sprintf(socketInfo.outBuffer,NOTIFY_REQ_OTAResult,otaSuccessFlag,otaInfo.oldVersionId,otaInfo.newVersionId);  
 		} else {
     }
@@ -642,34 +574,32 @@ void notifyMsgSendHandle(MSGID msgid)
 		#ifdef NETWORK_COUNT_ENABLE
 		pc.printf("numbers of sended massage:%d\r\n",++networkCount.sendCnt);
 		#endif 
-		#endif
 }
 
-/* Modify in 20171222 */
+/*!
+	@birfe command respond handler
+	@input MsgID
+	@output None
+*/
 void cmdMsgRespHandle(MSGID msgid)
 {
     int len;
-
     if((msgid == invalidID)||(msgid >= unknownMsgID))
         return;
     memset(socketInfo.outBuffer,0,sizeof(socketInfo.outBuffer));
-  //  if(msgid == setChargingTime) {
-  //      sprintf(socketInfo.outBuffer,CMD_RESP_setChargingTime,respcode,msgIdstr);
-  //  } else 
     if(msgid == setChargingStart) {
 			sprintf(socketInfo.outBuffer,CMD_RESP_setChargingStart,respcode,msgIdstr);
-    } else if(msgid == setChargingEnd) {  //Modify 20171222
+    } else if(msgid == setChargingEnd) {  
 			if(chargerInfo.status == charging)
 				sprintf(socketInfo.outBuffer,CMD_RESP_setChargingEnd,respcode,msgIdstr,chargerInfo.chargingType,chargerInfo.energy,  // ericyang 20161216
 				chargerInfo.duration/60,chargerInfo.status,chargerInfo.connect,setChargingDuration,setChargingEnergy);
 			else
 				sprintf(socketInfo.outBuffer,CMD_RESP_setChargingEnd,respcode,msgIdstr,curChargingType,curChargingEnergy,  // ericyang 20161216
 				curChargingDuration/60,chargerInfo.status,chargerInfo.connect,setChargingDuration,setChargingEnergy);
-		}else if(msgid == setUpdateVersion){   //orangeCai 20170328
+		}else if(msgid == setUpdateVersion){
 	    	sprintf(socketInfo.outBuffer,CMD_RESP_setUpdateVersion,respcode,msgIdstr);
 		}
 		#ifdef RTC_ENABLE
-		// orangecai 20170721
 		 else if(msgid == setCalibrateTime){
 				sprintf(socketInfo.outBuffer,CMD_RESP_setCalibrateTime,respcode,msgIdstr);
 		}else if(msgid == getDate){
@@ -685,19 +615,20 @@ void cmdMsgRespHandle(MSGID msgid)
     }else if(msgid == getCurVersion){
 				sprintf(socketInfo.outBuffer,CMD_RESP_getCurVersion,respcode,msgIdstr,VERSION_INFO);
 		}
-		myMutex.lock();
     len = strlen(socketInfo.outBuffer);
     tcpsocket.send(socketInfo.outBuffer, len);
-		myMutex.unlock();
 		pc.printf("cmdMsgRespHandle,send %d bytes: %s\r\n",len,socketInfo.outBuffer);
 		#ifdef NETWORK_COUNT_ENABLE
 		pc.printf("numbers of sended massage:%d\r\n",++networkCount.sendCnt);
 		#endif 
 }
 
-/****************************************************************/
 #if defined(EEPROM_ENABLE)
-
+/*!
+	@birfe EEPROM test function
+	@input None
+	@output None
+*/
 void eepromTest(void)
 {
 	char data[4];
@@ -717,7 +648,13 @@ void eepromTest(void)
 	
 	pc.printf("data read from eeprom:%c\r\n",data[0]);	
 }
-
+/*!
+	@birfe Write data to EEPROM
+	@input start address:0~255
+				 pointer to data expected to be writed
+				 sizes of data to be writed
+	@output None
+*/
 uint8_t writeToEEPROM(uint8_t addr,char* data,uint8_t size)
 {
 	uint8_t ret = 0;
@@ -750,7 +687,6 @@ uint8_t writeToEEPROM(uint8_t addr,char* data,uint8_t size)
 			lastPageSize = (size-firstPageSize)%EEPROM_PAGE_SIZE;
 		}
 	}
-//	pc.printf("pageNum=%d\tfirstPageSize=%d\tlastPageSize=%d\r\n",pageNum,firstPageSize,lastPageSize);
 
 	/* write data to first page */
 	dataBuffer[0] = addr;
@@ -761,7 +697,7 @@ uint8_t writeToEEPROM(uint8_t addr,char* data,uint8_t size)
 	
 	for(int i=0;i<pageNum-2;i++){
 		dataBuffer[0] = addr + firstPageSize + i * EEPROM_PAGE_SIZE;
-//		pc.printf("addr:%d\r\n",tempBuffer[0]);
+
 		for(int j=0;j<EEPROM_PAGE_SIZE;j++,ptr++)
 		  dataBuffer[j+1] = data[ptr];
 		i2c1.write(EEPROM_ADDRESS_WRITE,dataBuffer,EEPROM_PAGE_SIZE+1);
@@ -770,14 +706,13 @@ uint8_t writeToEEPROM(uint8_t addr,char* data,uint8_t size)
 	/* write data to last page */
   if(pageNum >1){
 		dataBuffer[0] = addr + firstPageSize + (pageNum-2) * EEPROM_PAGE_SIZE;
-//		pc.printf("addr:%d\r\n",tempBuffer[0]);
+
 		for(int i=0;i<lastPageSize;i++,ptr++)
 			dataBuffer[i+1] = data[ptr];
 		i2c1.write(EEPROM_ADDRESS_WRITE,dataBuffer,lastPageSize+1);
 	}
 	
   crc1 = calculate_crc16(data,size);
-//  pc.printf("crc1 = %x\r\n",crc1);	
 	wait(0.003);
 
 	/* read back the data and verify */
@@ -785,23 +720,32 @@ uint8_t writeToEEPROM(uint8_t addr,char* data,uint8_t size)
 	i2c1.write(EEPROM_ADDRESS_WRITE,dataBuffer,1);
 	i2c1.read(EEPROM_ADDRESS_READ,dataBuffer,size);
 	crc2 = calculate_crc16(dataBuffer,size);
-//	pc.printf("crc2 = %x\r\n",crc2);
 	if(crc1 == crc2)
 	{
 		ret = 1;
-//		pc.printf("Write and verify data to eeprom successfully!\r\n");
 	}else{
-//		pc.printf("Failed to write data to eeprom!\r\n");
 	}
 	return ret;
 }
-
+/*!
+	@birfe Read data from EEPROM
+	@input start address:0~255
+				 pointer to data expected to be writed
+				 sizes of data to be writed
+	@output None
+*/
 void readFromEEPROM(uint8_t addr,char* data,uint8_t size)
 {
 	char tmp = addr;
 	i2c1.write(EEPROM_ADDRESS_WRITE,&tmp,1);
 	i2c1.read(EEPROM_ADDRESS_READ,data,size);
 }
+
+/*!
+	@birfe Save chargerInfo to EEPROM
+	@input None
+	@output None
+*/
 void saveChargerInfoToEEPROM(void)
 {
 	uint16_t crc16;
@@ -814,6 +758,11 @@ void saveChargerInfoToEEPROM(void)
 	else
 		pc.printf("fail to save chargerInfo\r\n");
 }
+/*!
+	@birfe Set default chargerInfo to EEPROM
+	@input None
+	@output None
+*/
 void setDefaultChargerInfoToEEPROM(void)
 {
 	memset(chargerInfo.meterNumber,0x0, sizeof(chargerInfo.meterNumber));
@@ -830,7 +779,11 @@ void setDefaultChargerInfoToEEPROM(void)
 	chargerInfo.chargingType = -1;
   saveChargerInfoToEEPROM();
 }
-
+/*!
+	@birfe Load chargerInfo from EEPROM
+	@input None
+	@output None
+*/
 void loadChargerInfoFromEEPROM(void)
 {
 	uint16_t crc16,checksum;
@@ -865,7 +818,9 @@ void loadChargerInfoFromEEPROM(void)
 }
 
 /*!
-	@brife test the endurance of eeprom
+	@birfe Test function for endurance of EEPROM
+	@input None
+	@output None
 */
 void eepromEnduranceTest(void)
 {
@@ -907,6 +862,11 @@ void eepromEnduranceTest(void)
 	}
 }
 #else
+/*!
+	@birfe Set default chargerInfo to flash
+	@input None
+	@output None
+*/
 void setDefaultChargerInfoToFlash(void)
 {
     memset(chargerInfo.meterNumber,0x0, sizeof(chargerInfo.meterNumber));
@@ -916,14 +876,18 @@ void setDefaultChargerInfoToFlash(void)
     chargerInfo.power = 0.0 ;
     chargerInfo.setDuration = 0;
     chargerInfo.duration = 0;
-    chargerInfo.status = idle;//charging;//0;
-    chargerInfo.connect = NOT_CONNECTED;//true;//false;
-	  chargerInfo.setEnergy = 0; //orangecai 20170719
-	  chargerInfo.chargingType = CHARGING_TYPE_NONE;//orangecai 20170719
+    chargerInfo.status = idle;
+    chargerInfo.connect = NOT_CONNECTED;
+	  chargerInfo.setEnergy = 0;
+	  chargerInfo.chargingType = CHARGING_TYPE_NONE;
 	  chargerInfo.userId = 0;
     saveChargerInfoToFlash();
 }
-
+/*!
+	@birfe Load chargerInfo from flash
+	@input None
+	@output None
+*/
 void loadChargerInfoFromFlash(void)
 {
     char *cdata = (char*)PARAM_START_ADDRESS;
@@ -931,7 +895,6 @@ void loadChargerInfoFromFlash(void)
 
     checksum = (cdata[0]<<8)|cdata[1];
     crc16 = calculate_crc16(cdata+2, sizeof(ChargerInfo));
-    //pc.printf("read flash checksum: %4X, Caculate checksum:%4X size=%d\r\n",checksum,crc16,sizeof(ChargerInfo) );
     if(checksum == crc16) {
         pc.printf("flash param check ok! reload parm to ram!\r\n");
         memcpy(&chargerInfo, cdata+2, sizeof(ChargerInfo));
@@ -953,7 +916,11 @@ void loadChargerInfoFromFlash(void)
 		pc.printf("type:%d\r\n",chargerInfo.chargingType);
 		pc.printf("userId:%d\r\n",chargerInfo.userId);
 }
-
+/*!
+	@birfe Save chargerInfo to flash
+	@input None
+	@output None
+*/
 void saveChargerInfoToFlash(void)
 {
     int crc16;
@@ -961,28 +928,32 @@ void saveChargerInfoToFlash(void)
     tempBuffer[0] = crc16 >> 8;
     tempBuffer[1] = crc16 & 0xff;
     memcpy(tempBuffer+2,(char*)&chargerInfo,sizeof(ChargerInfo));
-    //pc.printf("default checksum: %4X,saving data to flash...\r\n",crc16);
     erase_sector(PARAM_START_ADDRESS);
-    //chargerInfo.setDuration++;
-    //program_flash(PARAM_START_ADDRESS, (char*)&chargerInfo, sizeof(ChargerInfo));
     program_flash(PARAM_START_ADDRESS, tempBuffer, sizeof(ChargerInfo)+2);
-    //pc.printf("saving ok\r\n");
 }
-#endif
+#endif //end of defined(EEPROM_ENABLE)
 
-
+/*!
+	@birfe Get charger exception status
+	@input None
+	@output charger exception status
+*/
 int getChargerException(void)
 {
     int ret = 0 ;
     ret =   METER_CRASHED_FLAG(chargerException.meterCrashedFlag ? 1 : 0)
             |CHARGING_VOLTAGE_ERROR_FLAG(chargerException.chargingVoltageErrorFlag ? 1 : 0)
             |CHARGING_CURRENT_ERROR_FLAG(chargerException.chargingCurrentErrorFlag ? 1 : 0)
-            |CHARGING_DISABLE_FLAG(chargerException.chargingEnableFlag ? 0 : 1)//???????
+            |CHARGING_DISABLE_FLAG(chargerException.chargingEnableFlag ? 0 : 1)
             |CHARGING_TIME_OVER_FLAG(chargerException.chargingTimeOverFlag ? 1 : 0)
 						|CHARGING_ENERGY_OVER_FLAG(chargerException.chargingEnergyOverFlag ? 1: 0);
     return ret;
 }
-
+/*!
+	@birfe Charger exception handler,update charger status and handle exception while charging
+	@input None
+	@output None
+*/
 void chargingExceptionHandle(void){
 	static int chargerExceptionStatus = 0;
 	if(chargerExceptionStatus != getChargerException()){ //charger exception status change
@@ -990,25 +961,19 @@ void chargingExceptionHandle(void){
 		if(chargerExceptionStatus != 0){
 			if(chargerInfo.status == charging){ //chargerExceptionStatus != 0 && chargerInfo.status == charging
 				stopCharging();
-				#ifdef GB18487_1_2015_AUTH_FUNC 
 	      disableCPPWM();
-				#endif
 				chargerException.chargingTimeOverFlag = false;
-				chargerException.chargingEnergyOverFlag = false; //20170719
-				#ifndef CHARGING_EXCEPTION_HANDLE_ENABLE
-				chargerInfo.status = errorCode | chargerExceptionStatus;
-				eventHandle.stopChargingFlag = true; // notify END charging msg when reconnect to server
-				#endif
-				#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
+				chargerException.chargingEnergyOverFlag = false;
+
 				if(chargerExceptionStatus == CHARGING_TIME_OVER_FLAG(1)){ //over time
 					chargerInfo.status = errorCode | chargerExceptionStatus ;
-					initailizeChargerInfo();
+					initChargerInfo();
 					eventHandle.stopChargingFlag = true;
 					chargingEndType = END_OVER_TIME;
 					pc.printf("overtime,stop charging!\r\n");
-				}else if(chargerExceptionStatus == CHARGING_ENERGY_OVER_FLAG(1)){  //over energy,orangecai 20170719
+				}else if(chargerExceptionStatus == CHARGING_ENERGY_OVER_FLAG(1)){//over energy
 					chargerInfo.status = errorCode | chargerExceptionStatus;
-					initailizeChargerInfo();
+					initChargerInfo();
 					eventHandle.stopChargingFlag = true;
 					chargingEndType = END_OVER_ENERGY;
 					pc.printf("over energy,stop charging!\r\n");
@@ -1016,19 +981,14 @@ void chargingExceptionHandle(void){
 					chargerInfo.status = errorCode | chargerExceptionStatus | charging; //status:exception happenned while charging
 					chargingExceptionFlag = true;  //set the charging exception flag
 				}
-				#endif
+				
 			}else{  //chargerExceptionStatus != 0 && chargerInfo.status != charging
-				#ifndef CHARGING_EXCEPTION_HANDLE_ENABLE
-				chargerInfo.status = errorCode | chargerExceptionStatus;
-				#endif
-				#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
 				if((chargerInfo.status & CHARGER_STATUS_MASK) == charging)
 					chargerInfo.status = errorCode | chargerExceptionStatus | charging;
 				else if(chargerExceptionStatus == CHARGING_DISABLE_FLAG(1))
 					chargerInfo.status = idle;
 				else
 					chargerInfo.status = errorCode | chargerExceptionStatus;
-				#endif
 			}
 		}else{ //chargerExceptionStatus == 0
 			chargerInfo.status = connected;
@@ -1042,15 +1002,12 @@ void chargingExceptionHandle(void){
 		#endif
 	} //end of charger exception status change
 
-/*communication exception handle*/
+/* Network exception handle */
 	if(chargerException.serverConnectedFlag == false && chargerInfo.status == charging){
 		stopCharging();
-		#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-		initailizeChargerInfo();
-		#endif
-		#ifdef GB18487_1_2015_AUTH_FUNC
+		initChargerInfo();
+
     disableCPPWM();
-    #endif
     chargerException.chargingTimeOverFlag = false;
 		chargerException.chargingEnergyOverFlag = false;
     chargerInfo.status = connected;
@@ -1062,12 +1019,10 @@ void chargingExceptionHandle(void){
     saveChargerInfoToFlash();
 		#endif
 	}
-	#ifdef CHARGING_EXCEPTION_HANDLE_ENABLE
-	  if(startContinueChargingFlag == true){//continue charging
-			preStartCharging();
-	  	pc.printf("Continue charging!\r\n");
-		}
-	#endif
+	if(startContinueChargingFlag == true){//continue charging
+		preStartCharging();
+	  pc.printf("Continue charging!\r\n");
+	}
 	
 	#ifdef LED_INFO_ENABLE
 	if((chargerException.meterCrashedFlag == true)||(chargerException.chargingCurrentErrorFlag == true) ||(chargerException.chargingVoltageErrorFlag == true))
