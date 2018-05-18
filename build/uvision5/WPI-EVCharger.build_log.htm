@@ -22,26 +22,11 @@ Dialog DLL:      TCM.DLL V1.14.5.0
  
 <h2>Project:</h2>
 I:\Project\EV-Charger\WPI-EVCharger.uvprojx
-Project File Date:  03/15/2018
+Project File Date:  05/18/2018
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 (build 20)', folder: 'F:\install\softwares\Keil_v5\ARM\ARMCC\Bin'
 Build target 'WPI-EVCharger'
-compiling otaCharger.cpp...
-OTA/otaCharger.h(17): warning:  #1-D: last line of file ends without a newline
-  #endif
-OTA/otaCharger.cpp(65): warning:  #1-D: last line of file ends without a newline
-  }
-OTA/otaCharger.cpp: 2 warnings, 0 errors
-compiling EVCharger.cpp...
-OTA\otaCharger.h(17): warning:  #1-D: last line of file ends without a newline
-  #endif
-EVCharger/EVCharger.cpp(498): warning:  #2748-D: null argument provided for parameter marked with attribute "nonnull"
-          if(strcmp(chargerInfo.meterNumber, 
-ULL) == NULL) {  
-EVCharger/EVCharger.cpp(1031): warning:  #1-D: last line of file ends without a newline
-  }
-EVCharger/EVCharger.cpp: 3 warnings, 0 errors
 compiling main.cpp...
 OTA\otaCharger.h(17): warning:  #1-D: last line of file ends without a newline
   #endif
@@ -92,32 +77,32 @@ main.cpp(906): warning:  #181-D: argument is incompatible with corresponding for
               sscanf(socketInfo.inBuffer,"%d.%d.%d.%d:%d",serverInfo,serverInfo+1,serverInfo+2,serverInfo+3,&serverPort);
 main.cpp(906): warning:  #181-D: argument is incompatible with corresponding format string conversion
               sscanf(socketInfo.inBuffer,"%d.%d.%d.%d:%d",serverInfo,serverInfo+1,serverInfo+2,serverInfo+3,&serverPort);
-main.cpp(1050): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
+main.cpp(1051): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
       Thread th1(timerOneSecondThread,
 ULL,osPriorityNormal,1024);
-main.cpp(1051): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
+main.cpp(1052): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
       Thread th2(heartbeatThread,
 ULL,osPriorityNormal,512);
-main.cpp(1052): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
+main.cpp(1053): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
   		Thread th3(exceptionHandleThread,
 ULL,osPriorityAboveNormal,1024);
-main.cpp(1053): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
+main.cpp(1054): warning:  #2570-D: function "rtos::Thread::Thread(void (*)(const void *), void *, osPriority, std::uint32_t, unsigned char *)" (declared at line 138 of "mbed-rtos/rtos/Thread.h") was declared deprecated ("Thread-spawning constructors hide errors and may lead to complex program state when a thread is declared")
   		Thread th4(netWorkThread,
 ULL,osPriorityNormal,1024);
-main.cpp(1078): warning:  #1-D: last line of file ends without a newline
+main.cpp(1079): warning:  #1-D: last line of file ends without a newline
   }
 main.cpp: 29 warnings, 0 errors
 linking...
-Program Size: Code=104206 RO-data=8478 RW-data=616 ZI-data=62956  
+Program Size: Code=104262 RO-data=8478 RW-data=616 ZI-data=62956  
 After Build - User command #1: fromelf --bin -o .\build\uvision5\bin\WPI-EVCharger.bin .\build\uvision5\WPI-EVCharger.axf
-".\build\uvision5\WPI-EVCharger.axf" - 0 Error(s), 34 Warning(s).
+".\build\uvision5\WPI-EVCharger.axf" - 0 Error(s), 29 Warning(s).
 
 <h2>Collection of Component include folders:</h2>
   I:\Project\EV-Charger\RTE
   F:\install\softwares\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Device\Include
 
 <h2>Collection of Component Files used:</h2>
-Build Time Elapsed:  00:00:03
+Build Time Elapsed:  00:00:04
 </pre>
 </body>
 </html>

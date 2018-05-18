@@ -943,6 +943,7 @@ void exceptionHandleThread(void const *argument)
 			Thread::wait(20);
 		}else{
 			eventHandle.checkMeterFlag = false;
+//			pc.printf("raad meter!\r\n");
       getMeterInfo();
 		}
 	}
